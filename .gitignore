@@ -1,0 +1,16 @@
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.pnpm-store/
+dist/
+.env
+.env.*
+!.env.example
+*.local
+.private/
+raw-data/
+backups/
+portfolio-exports/
+artifacts/
+desktop.ini

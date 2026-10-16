@@ -1,0 +1,9 @@
+{
+  "year": 2026,
+  "expected_sessions": 239,
+  "document": "IDX Peng-00171/BEI.POP/09-2025, 23 September 2025",
+  "source_url": "https://suprasekuritas.co.id/storage/2026/01/Peng-00171-Libur-Bursa-2026-2.pdf",
+  "source_note": "IDX-authored announcement hosted by a securities firm. IDX calendar page returned HTTP 403; no access restriction was bypassed. Additional exchange announcements can amend this calendar.",
+  "reviewed_on": "2026-10-16",
+  "holidays": ["2026-01-01","2026-01-16","2026-02-16","2026-02-17","2026-03-18","2026-03-19","2026-03-20","2026-03-23","2026-03-24","2026-04-03","2026-05-01","2026-05-14","2026-05-15","2026-05-27","2026-05-28","2026-06-01","2026-06-16","2026-08-17","2026-08-25","2026-12-24","2026-12-25","2026-12-31"]
+}

@@ -1,0 +1,4 @@
+certifi==2026.7.22
+yfinance==1.7.0
+exchange-calendars==4.13.2
+openpyxl==3.1.5
