@@ -122,7 +122,11 @@ class SupabaseStore:
                 stock.update(status='available',observationDate=last['trade_date'],retrievedAt=last['fetched_at'],qualityFlag='validated_eod',rawChecksum=last['row_hash'],priceSource=last['source'])
                 stock['profile']['lastQuote']=float(last['close'])
                 stock.update(previousDate=previous['trade_date'] if previous else None,dailyChange=float(last['close'])-float(previous['close']) if previous else None,dailyChangePercent=(float(last['close'])/float(previous['close'])-1)*100 if previous else None)
-                if selected==symbol:stock['history']=[{'date':r['trade_date'],'open':float(r['open']),'high':float(r['high']),'low':float(r['low']),'close':float(r['close']),'adjustedClose':None if r['adjusted_close'] is None else float(r['adjusted_close']),'volume':r['volume'],'periodStatus':'eod'} for r in rows]
+                if selected==symbol:
+                    # Keep older real observations for the existing All range.
+                    by_date={r['date']:r for r in stock['history']}
+                    by_date.update({r['trade_date']:{'date':r['trade_date'],'open':float(r['open']),'high':float(r['high']),'low':float(r['low']),'close':float(r['close']),'adjustedClose':None if r['adjusted_close'] is None else float(r['adjusted_close']),'volume':r['volume'],'periodStatus':'eod'} for r in rows})
+                    stock['history']=[by_date[d] for d in sorted(by_date)]
         except CloudUnavailable:pass
         return {'mode':'supabase','generatedAt':max((s['retrievedAt'] for s in stocks if s['retrievedAt']),default=now_iso()),'stocks':stocks,'eodSchema':eod_status,'extendedData':{'status':detail_status,'reason':'Vendor snapshots retain unknown publication dates. No generated fundamentals or point-in-time claims.'}}
 
@@ -185,3 +189,4 @@ class SupabaseStore:
 
     def ingest(self,series,observations,run_id):
         return self.request('rpc/ingest_economic_batch',{'target_owner':self.owner,'series_record':series,'rows':observations,'run_identifier':run_id})
+
