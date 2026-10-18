@@ -109,12 +109,12 @@ class SupabaseStore:
         # Serve the daily database table through the existing frontend contract.
         eod_status='unavailable'
         try:
-            from .idx_eod import EodStore,ENABLED_TICKERS
+            from .idx_eod import EodStore
             eod=EodStore(self.env,self.transport)
+            latest_eod={r['ticker']:r['stock_prices_daily'][::-1] for r in eod.latest_prices()}
             for stock in stocks:
                 symbol=stock['symbol']
-                if symbol not in ENABLED_TICKERS:continue
-                rows=eod.prices(symbol) if selected==symbol else self.request('stock_prices_daily?'+urlencode({'owner_id':'eq.'+self.owner,'ticker':'eq.'+symbol,'order':'trade_date.desc','limit':2}))[::-1]
+                rows=eod.prices(symbol) if selected==symbol else latest_eod.get(symbol,[])
                 eod_status='ready'
                 if not rows:continue
                 last=rows[-1];previous=rows[-2] if len(rows)>1 else None
@@ -189,4 +189,3 @@ class SupabaseStore:
 
     def ingest(self,series,observations,run_id):
         return self.request('rpc/ingest_economic_batch',{'target_owner':self.owner,'series_record':series,'rows':observations,'run_identifier':run_id})
-

@@ -3,6 +3,7 @@ import csv
 import hashlib
 import json
 import math
+import re
 import uuid
 from datetime import datetime,timedelta,timezone,date
 from pathlib import Path
@@ -17,9 +18,28 @@ from .idx_calendar import session_dates,eligible_end
 JAKARTA=timezone(timedelta(hours=7))
 PILOT='SMDR.JK'
 UNIVERSE=json.loads((ROOT/'config/idx-eod-universe.json').read_text())
-ENABLED_TICKERS=tuple(UNIVERSE['tickers'])
+def enabled_tickers(store=None):
+    symbols=list(dict.fromkeys((store or EodStore()).tracked()))
+    if not symbols or len(symbols)>200 or any(not re.fullmatch(r'[A-Z0-9]{3,10}\.JK',s) for s in symbols):
+        raise ValueError('Active watchlist must contain 1–200 valid IDX tickers')
+    return tuple(symbols)
 
 class EodStore(SupabaseStore):
+    def latest_prices(self):
+        return self.request('stocks?'+urlencode({'owner_id':'eq.'+self.owner,'select':'ticker,stock_prices_daily(trade_date,close,fetched_at,row_hash,source)','stock_prices_daily.order':'trade_date.desc','stock_prices_daily.limit':2,'limit':200}))
+
+    def overview(self):
+        symbols=enabled_tickers(self)
+        prices={r['ticker']:r['stock_prices_daily'] for r in self.latest_prices()}
+        logs=self.request('data_sync_logs?'+urlencode({'owner_id':'eq.'+self.owner,'order':'started_at.desc','limit':1000}))
+        latest={}
+        for log in logs:latest.setdefault(log['ticker'],log)
+        stocks=[]
+        for symbol in symbols:
+            points=prices.get(symbol,[]);log=latest.get(symbol)
+            stocks.append({'ticker':symbol,'last_date':points[0]['trade_date'] if points else None,'last_close':points[0]['close'] if points else None,'log':log})
+        return {'symbols':symbols,'stocks':stocks,'available':sum(s['last_date'] is not None for s in stocks),'schedule':'Weekdays 17:00 Asia/Jakarta; IDX holidays skipped'}
+
     def prices(self,ticker=PILOT,start='2021-01-01',end='2026-12-31'):
         output=[]
         for offset in range(0,6000,1000):
@@ -59,7 +79,8 @@ def normalized_row(row,source,fetched_at,reference):
         value=row.get(key)
         if value in ('',None) and key=='adjusted_close':values[key]=None;continue
         if isinstance(value,bool):raise ValueError('Boolean is not a price or volume')
-        number=float(value)
+        try:number=float(value)
+        except (TypeError,ValueError):raise ValueError('Missing or invalid OHLCV number') from None
         if not math.isfinite(number):raise ValueError('Non-finite OHLCV value')
         values[key]=number
     if values['volume']<0 or not values['volume'].is_integer():raise ValueError('Volume must be non-negative whole shares')
@@ -119,9 +140,10 @@ def import_summary(path,ticker,trade_date=None,volume_unit=None):
     if not result:raise ValueError('Ticker absent or required summary columns unavailable')
     return result
 
-def run_eod(ticker=PILOT,backfill=False,scheduled=False,summary_file=None,trade_date=None,volume_unit=None,store=None,provider=None,now=None,review=None):
-    if ticker not in ENABLED_TICKERS:raise ValueError('Ticker is not enabled for daily EOD synchronization')
+def run_eod(ticker=PILOT,backfill=False,scheduled=False,summary_file=None,trade_date=None,volume_unit=None,store=None,provider=None,now=None,review=None,allowed_symbols=None):
     store=store or EodStore();now=(now or datetime.now(JAKARTA)).astimezone(JAKARTA)
+    if ticker not in (allowed_symbols if allowed_symbols is not None else enabled_tickers(store)):
+        raise ValueError('Ticker is not in the active research watchlist')
     report={'run_id':str(uuid.uuid4()),'ticker':ticker,'source':'IDX daily summary' if summary_file else 'Yahoo Finance',
             'trigger':'schedule' if scheduled else 'manual','started_at':datetime.now(timezone.utc).isoformat(),'status':'running',
             'records_inserted':0,'records_updated':0,'records_unchanged':0,'source_request_attempted':False}
@@ -135,6 +157,11 @@ def run_eod(ticker=PILOT,backfill=False,scheduled=False,summary_file=None,trade_
         first=now.date().replace(year=now.year-5) if not (now.month==2 and now.day==29) else date(now.year-5,2,28)
         listing=UNIVERSE['listing_dates'].get(ticker)
         if listing:first=max(first,date.fromisoformat(listing['date']))
+        # A previously verified vendor listing date avoids re-requesting pre-IPO gaps.
+        if not listing and hasattr(store,'logs'):
+            previous=store.logs(ticker)
+            cached=next((r.get('quality',{}).get('listing_date') for r in previous if r.get('quality') and r['quality'].get('listing_date')),None)
+            if cached:listing={'date':cached,'source_url':'Yahoo Finance history metadata'};first=max(first,date.fromisoformat(cached))
         existing=store.prices(ticker,first.isoformat(),end)
         start=first.isoformat() if backfill or not existing else max(first, date.fromisoformat(existing[-1]['trade_date'])-timedelta(days=7)).isoformat()
         # Revisit older gaps rather than permanently abandoning failed sessions.
@@ -153,9 +180,21 @@ def run_eod(ticker=PILOT,backfill=False,scheduled=False,summary_file=None,trade_
             if review:
                 phase='source_permission';review('yahoo','retrieve','cache','retain')
             phase='yahoo_history';report['source_request_attempted']=True
-            bars=(provider or YahooEodProvider()).history(InstrumentRef(ticker,'IDX','IDR','Asia/Jakarta'),start,(date.fromisoformat(end)+timedelta(days=1)).isoformat())
-            rows=[normalized_row({'trade_date':b.observation_date,'open':b.open,'high':b.high,'low':b.low,'close':b.close,'adjusted_close':b.adjusted_close,'volume':b.volume},'Yahoo Finance',b.fetched_at,'https://finance.yahoo.com/quote/'+ticker+'/history/') for b in bars]
+            yahoo=provider or YahooEodProvider();instrument=InstrumentRef(ticker,'IDX','IDR','Asia/Jakarta')
+            bars=yahoo.history(instrument,start,(date.fromisoformat(end)+timedelta(days=1)).isoformat())
+            expected=session_dates(start,end)
+            if not listing and bars and expected and min(b.observation_date for b in bars)>expected[0] and hasattr(yahoo,'first_trade_date'):
+                listed=yahoo.first_trade_date(instrument)
+                if listed:
+                    listing={'date':listed,'source_url':'Yahoo Finance history metadata'}
+                    start=max(start,listed)
+            rows=[];rejected=[]
+            for b in bars:
+                try:rows.append(normalized_row({'trade_date':b.observation_date,'open':b.open,'high':b.high,'low':b.low,'close':b.close,'adjusted_close':b.adjusted_close,'volume':b.volume},'Yahoo Finance',b.fetched_at,'https://finance.yahoo.com/quote/'+ticker+'/history/'))
+                except ValueError as error:rejected.append({'trade_date':b.observation_date,'reason':str(error)})
         phase='validation';quality=validate_rows(rows,start,end,existing)
+        if not summary_file:quality['rejected_rows']=rejected
+        if listing:quality.update(listing_date=listing['date'],listing_date_source=listing['source_url'])
         phase='database_commit';result=store.commit(report,rows,quality);report.update(result,quality=quality)
         phase='database_readback';saved=store.prices(ticker,start,end)
         expected={(r['trade_date'],r['row_hash']) for r in rows}

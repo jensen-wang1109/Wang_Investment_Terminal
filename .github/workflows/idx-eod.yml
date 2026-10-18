@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       backfill:
-        description: Reload up to five years for BBCA, SMDR and ADMR
+        description: Reload up to five years for all active watchlist stocks
         type: boolean
         default: false
 permissions:
@@ -16,7 +16,7 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 55
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -38,10 +38,3 @@ jobs:
           if os.environ.get('EVENT_NAME')=='schedule':args.append('--scheduled')
           raise SystemExit(subprocess.call(args))
           PY
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: idx-eod-run-${{ github.run_id }}
-          path: .private/research/idx-eod-runs/*.json
-          include-hidden-files: true
-          retention-days: 7

@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from datetime import datetime
 from unittest.mock import patch
-from services.research_api.idx_eod import normalized_row,validate_rows,import_summary,run_eod,EodStore
+from services.research_api.idx_eod import normalized_row,validate_rows,import_summary,run_eod,EodStore,enabled_tickers
 from services.research_api.idx_calendar import session_dates,eligible_end
 from services.research_api.contracts import PermissionDenied,DailyPrice
 from services.research_api.cloud import CloudUnavailable
@@ -16,6 +16,7 @@ def row(day='2026-10-16',**overrides):
 
 class MemoryStore:
     def __init__(self):self.saved=[];self.events=[];self.commits=0
+    def tracked(self):return ['SMDR.JK','BBCA.JK','ADMR.JK']
     def begin(self,r):self.events.append(('begin',dict(r)))
     def finish(self,r):self.events.append(('finish',dict(r)))
     def prices(self,*args):return self.saved
@@ -37,6 +38,29 @@ class EodTests(unittest.TestCase):
         self.assertEqual(eligible_end(NOW.replace(hour=16)),'2026-10-15')
         self.assertEqual(session_dates('2022-04-29','2022-05-06'),[])
         self.assertEqual(session_dates('2025-08-18','2025-08-18'),[])
+
+    def test_active_database_watchlist_controls_access_and_cap(self):
+        class Store:
+            def tracked(self):return ['MEDC.JK','BBCA.JK','MEDC.JK']
+        self.assertEqual(enabled_tickers(Store()),('MEDC.JK','BBCA.JK'))
+        with self.assertRaises(ValueError):run_eod(ticker='BBRI.JK',store=Store())
+        with patch.object(Store,'tracked',return_value=['AAA'+str(i)+'.JK' for i in range(201)]):
+            with self.assertRaises(ValueError):enabled_tickers(Store())
+
+    def test_vendor_timestamp_listing_date_and_corrupt_row_quarantine(self):
+        import pandas as pd
+        from types import SimpleNamespace
+        from services.research_api.yahoo_eod import YahooEodProvider
+        from services.research_api.contracts import InstrumentRef
+        metadata={'firstTradeDate':pd.Timestamp('2024-12-05T09:00:00+07:00')}
+        provider=YahooEodProvider(loader=lambda _:SimpleNamespace(Ticker=lambda _:SimpleNamespace(get_history_metadata=lambda:metadata)))
+        self.assertEqual(provider.first_trade_date(InstrumentRef('AADI.JK','IDX','IDR','Asia/Jakarta')),'2024-12-05')
+        class Provider:
+            def history(self,*a):return [DailyPrice('SMDR.JK','2026-10-15',100,80,90,105,None,1000,'IDR','yahoo',FETCH),DailyPrice('SMDR.JK','2026-10-16',100,110,90,105,None,1000,'IDR','yahoo',FETCH)]
+        store=MemoryStore();report=run_eod(store=store,provider=Provider(),now=NOW)
+        self.assertEqual(report['status'],'warning');self.assertTrue(report['database_verified'])
+        self.assertEqual(len(report['quality']['rejected_rows']),1)
+        self.assertEqual([r['trade_date'] for r in store.saved],['2026-10-16'])
 
     def test_listing_date_excludes_pre_ipo_sessions_from_download(self):
         class Provider:

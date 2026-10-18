@@ -1,5 +1,5 @@
-# Wang Investment Terminal — IDX EOD pilot
+# Wang Investment Terminal — Daily IDX EOD
 
-SMDR.JK daily-price pipeline for the existing Investment Intelligence Platform. See [setup and verification](IDX_EOD_PIPELINE.md).
+Python/yfinance daily-price ingestion for the existing private Investment Intelligence Platform. The scheduler reads the active watchlist from Supabase after market close and verifies each upsert by reading it back. See [setup, integrity checks and API integration](IDX_EOD_PIPELINE.md).
 
-This repository contains the minimal scheduler/collector package. The existing local frontend and private research data are not published here. A configured workflow is not proof of a verified price sync; inspect the run logs and database readback.
+This repository contains the minimal scheduler/collector package. Personal watchlists, credentials, local frontend research and individual run artifacts remain private.

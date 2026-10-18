@@ -7,6 +7,15 @@ from .providers import finite,provider_symbol,retry_transient
 class YahooEodProvider:
     def __init__(self,loader=importlib.import_module):self.loader=loader
 
+    def first_trade_date(self,instrument):
+        metadata=retry_transient(lambda:self.loader('yfinance').Ticker(provider_symbol(instrument)).get_history_metadata())
+        epoch=metadata.get('firstTradeDate') if metadata else None
+        if epoch is None:return None
+        from zoneinfo import ZoneInfo
+        if isinstance(epoch,datetime):return epoch.astimezone(ZoneInfo(instrument.timezone)).date().isoformat()
+        if isinstance(epoch,str):return datetime.fromisoformat(epoch.replace('Z','+00:00')).astimezone(ZoneInfo(instrument.timezone)).date().isoformat()
+        return datetime.fromtimestamp(epoch,timezone.utc).astimezone(ZoneInfo(instrument.timezone)).date().isoformat()
+
     def history(self,instrument,start,end):
         library=self.loader('yfinance')
         # Explicit raw OHLC and separate Adj Close; end is exclusive in yfinance.
