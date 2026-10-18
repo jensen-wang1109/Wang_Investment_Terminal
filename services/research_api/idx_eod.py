@@ -31,14 +31,15 @@ class EodStore(SupabaseStore):
     def overview(self):
         symbols=enabled_tickers(self)
         prices={r['ticker']:r['stock_prices_daily'] for r in self.latest_prices()}
+        counts={r['ticker']:r['stock_prices_daily'][0]['count'] for r in self.request('stocks?'+urlencode({'owner_id':'eq.'+self.owner,'select':'ticker,stock_prices_daily(count)','limit':200}))}
         logs=self.request('data_sync_logs?'+urlencode({'owner_id':'eq.'+self.owner,'order':'started_at.desc','limit':1000}))
         latest={}
         for log in logs:latest.setdefault(log['ticker'],log)
         stocks=[]
         for symbol in symbols:
             points=prices.get(symbol,[]);log=latest.get(symbol)
-            stocks.append({'ticker':symbol,'last_date':points[0]['trade_date'] if points else None,'last_close':points[0]['close'] if points else None,'log':log})
-        return {'symbols':symbols,'stocks':stocks,'available':sum(s['last_date'] is not None for s in stocks),'schedule':'Weekdays 17:00 Asia/Jakarta; IDX holidays skipped'}
+            stocks.append({'ticker':symbol,'row_count':counts.get(symbol,0),'last_date':points[0]['trade_date'] if points else None,'last_close':points[0]['close'] if points else None,'log':log})
+        return {'symbols':symbols,'stocks':stocks,'total_rows':sum(s['row_count'] for s in stocks),'available':sum(s['last_date'] is not None for s in stocks),'schedule':'Weekdays 17:00 Asia/Jakarta; IDX holidays skipped'}
 
     def prices(self,ticker=PILOT,start='2021-01-01',end='2026-12-31'):
         output=[]
@@ -213,3 +214,4 @@ def run_eod(ticker=PILOT,backfill=False,scheduled=False,summary_file=None,trade_
         destination=ROOT/'.private/research/idx-eod-runs';destination.mkdir(parents=True,exist_ok=True)
         (destination/(report['run_id']+'.json')).write_text(json.dumps(report,indent=2),encoding='utf-8')
     return report
+
