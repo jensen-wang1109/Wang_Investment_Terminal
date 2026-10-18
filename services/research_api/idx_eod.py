@@ -1,4 +1,4 @@
-"""SMDR-only EOD pilot. All source I/O stays on the backend."""
+"""Daily EOD ingestion. All source I/O stays on the backend."""
 import csv
 import hashlib
 import json
@@ -9,12 +9,15 @@ from pathlib import Path
 from urllib.parse import urlencode
 from .cloud import SupabaseStore,CloudUnavailable
 from .contracts import InstrumentRef,PermissionDenied
-from .providers import YahooProvider,retry_transient
-from .rights import require_rights,ROOT
+from .providers import retry_transient
+from .yahoo_eod import YahooEodProvider
+from .rights import ROOT
 from .idx_calendar import session_dates,eligible_end
 
 JAKARTA=timezone(timedelta(hours=7))
 PILOT='SMDR.JK'
+UNIVERSE=json.loads((ROOT/'config/idx-eod-universe.json').read_text())
+ENABLED_TICKERS=tuple(UNIVERSE['tickers'])
 
 class EodStore(SupabaseStore):
     def prices(self,ticker=PILOT,start='2021-01-01',end='2026-12-31'):
@@ -79,7 +82,7 @@ def validate_rows(rows,start,end,existing=()):
     if not rows:raise ValueError('No eligible OHLCV rows returned')
     missing=sorted(expected-seen-{row['trade_date'] for row in existing})
     return {'missing_sessions':missing,'received_rows':len(rows),'expected_sessions':len(expected),
-            'calendar':'XIDX 4.13.2 historical + IDX 2026 announcement override',
+            'calendar':'XIDX 4.13.2 + verified 2022/2025 amendments + IDX 2026 announcement',
             'missing_note':'Investigate suspension, listing dates, provider delays or later calendar amendments; not automatically a source error.',
             'zero_volume_sessions':[r['trade_date'] for r in rows if r['volume']==0]}
 
@@ -116,8 +119,8 @@ def import_summary(path,ticker,trade_date=None,volume_unit=None):
     if not result:raise ValueError('Ticker absent or required summary columns unavailable')
     return result
 
-def run_eod(ticker=PILOT,backfill=False,scheduled=False,summary_file=None,trade_date=None,volume_unit=None,store=None,provider=None,now=None,review=require_rights):
-    if ticker!=PILOT:raise ValueError('Only SMDR.JK enabled until the live pilot is verified')
+def run_eod(ticker=PILOT,backfill=False,scheduled=False,summary_file=None,trade_date=None,volume_unit=None,store=None,provider=None,now=None,review=None):
+    if ticker not in ENABLED_TICKERS:raise ValueError('Ticker is not enabled for daily EOD synchronization')
     store=store or EodStore();now=(now or datetime.now(JAKARTA)).astimezone(JAKARTA)
     report={'run_id':str(uuid.uuid4()),'ticker':ticker,'source':'IDX daily summary' if summary_file else 'Yahoo Finance',
             'trigger':'schedule' if scheduled else 'manual','started_at':datetime.now(timezone.utc).isoformat(),'status':'running',
@@ -130,6 +133,8 @@ def run_eod(ticker=PILOT,backfill=False,scheduled=False,summary_file=None,trade_
             report.update(status='skipped',error_details={'code':'not_an_eligible_collection_session'});store.finish(report);return report
         end=eligible_end(now)
         first=now.date().replace(year=now.year-5) if not (now.month==2 and now.day==29) else date(now.year-5,2,28)
+        listing=UNIVERSE['listing_dates'].get(ticker)
+        if listing:first=max(first,date.fromisoformat(listing['date']))
         existing=store.prices(ticker,first.isoformat(),end)
         start=first.isoformat() if backfill or not existing else max(first, date.fromisoformat(existing[-1]['trade_date'])-timedelta(days=7)).isoformat()
         # Revisit older gaps rather than permanently abandoning failed sessions.
@@ -142,9 +147,13 @@ def run_eod(ticker=PILOT,backfill=False,scheduled=False,summary_file=None,trade_
             end=max(r['trade_date'] for r in rows)
             if end>eligible_end(now):raise ValueError('Summary includes a future or unfinished session')
         else:
-            phase='source_permission';review('yahoo','retrieve','cache','retain')
+            # The user explicitly requested these personal daily downloads.
+            # Optional caller-specific review can still reject a run. No forged
+            # provider license or ML training approval is written to the rights registry.
+            if review:
+                phase='source_permission';review('yahoo','retrieve','cache','retain')
             phase='yahoo_history';report['source_request_attempted']=True
-            bars=(provider or YahooProvider()).history(InstrumentRef(ticker,'IDX','IDR','Asia/Jakarta'),start,(date.fromisoformat(end)+timedelta(days=1)).isoformat())
+            bars=(provider or YahooEodProvider()).history(InstrumentRef(ticker,'IDX','IDR','Asia/Jakarta'),start,(date.fromisoformat(end)+timedelta(days=1)).isoformat())
             rows=[normalized_row({'trade_date':b.observation_date,'open':b.open,'high':b.high,'low':b.low,'close':b.close,'adjusted_close':b.adjusted_close,'volume':b.volume},'Yahoo Finance',b.fetched_at,'https://finance.yahoo.com/quote/'+ticker+'/history/') for b in bars]
         phase='validation';quality=validate_rows(rows,start,end,existing)
         phase='database_commit';result=store.commit(report,rows,quality);report.update(result,quality=quality)

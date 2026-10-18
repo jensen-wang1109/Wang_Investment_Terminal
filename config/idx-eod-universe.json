@@ -1,0 +1,10 @@
+{
+  "tickers": ["SMDR.JK", "BBCA.JK", "ADMR.JK"],
+  "listing_dates": {
+    "ADMR.JK": {
+      "date": "2022-01-03",
+      "source_url": "https://adarominerals.id/app/webroot/upload/files/ADMR%20-%20Annual%20Report%202021.pdf",
+      "note": "Issuer annual report: IDX listing on January 3, 2022. Pre-listing sessions are not missing observations."
+    }
+  }
+}

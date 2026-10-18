@@ -1,11 +1,11 @@
-name: IDX EOD SMDR pilot
+name: IDX Daily EOD
 on:
   schedule:
     - cron: '0 10 * * 1-5' # 17:00 Asia/Jakarta; GitHub may delay scheduled jobs.
   workflow_dispatch:
     inputs:
       backfill:
-        description: Reload five years for SMDR.JK
+        description: Reload up to five years for BBCA, SMDR and ADMR
         type: boolean
         default: false
 permissions:
@@ -21,7 +21,6 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       WANG_SUPABASE_OWNER_ID: ${{ secrets.WANG_SUPABASE_OWNER_ID }}
-      YAHOO_RIGHTS_JSON: ${{ secrets.YAHOO_RIGHTS_JSON }}
       BACKFILL: ${{ inputs.backfill }}
       EVENT_NAME: ${{ github.event_name }}
     steps:
@@ -30,18 +29,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -r services/research_api/requirements-eod.txt
-      - name: Configure private source evidence when supplied
-        run: |
-          python - <<'PY'
-          import os,json
-          from pathlib import Path
-          value=os.environ.get('YAHOO_RIGHTS_JSON','')
-          if value:
-              json.loads(value)
-              Path('.private').mkdir(exist_ok=True)
-              Path('.private/provider-rights.json').write_text(value)
-          PY
-      - name: Sync SMDR and verify database readback
+      - name: Sync daily prices and verify database readback
         run: |
           python - <<'PY'
           import os,subprocess,sys

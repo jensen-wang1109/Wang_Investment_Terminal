@@ -106,24 +106,25 @@ class SupabaseStore:
             stocks[-1].update(dailyChange=value(change,'price_change'),dailyChangePercent=value(change,'price_change_percent'),previousDate=change.get('previous_date'),details=details if selected==symbol else None)
             if vendor:
                 stocks[-1]['profile'].update(name=vendor['profile'].get('longName') or vendor['profile'].get('shortName') or company['name'],businessSummary=vendor['profile'].get('longBusinessSummary'),vendorSector=vendor['profile'].get('sector'),vendorIndustry=vendor['profile'].get('industry'),financialCurrency=vendor['profile'].get('financialCurrency'),retrievedAt=vendor['retrieved_at'])
-        # The EOD pilot feeds the existing chart contract without source I/O.
+        # Serve the daily database table through the existing frontend contract.
         eod_status='unavailable'
-        if any(s['symbol']=='SMDR.JK' for s in stocks):
-            try:
-                from .idx_eod import EodStore
-                eod=EodStore(self.env,self.transport)
-                rows=eod.prices('SMDR.JK') if selected=='SMDR.JK' else self.request('stock_prices_daily?'+urlencode({'owner_id':'eq.'+self.owner,'ticker':'eq.SMDR.JK','order':'trade_date.desc','limit':2}))[::-1]
+        try:
+            from .idx_eod import EodStore,ENABLED_TICKERS
+            eod=EodStore(self.env,self.transport)
+            for stock in stocks:
+                symbol=stock['symbol']
+                if symbol not in ENABLED_TICKERS:continue
+                rows=eod.prices(symbol) if selected==symbol else self.request('stock_prices_daily?'+urlencode({'owner_id':'eq.'+self.owner,'ticker':'eq.'+symbol,'order':'trade_date.desc','limit':2}))[::-1]
                 eod_status='ready'
-                if rows:
-                    s=next(s for s in stocks if s['symbol']=='SMDR.JK');last=rows[-1];previous=rows[-2] if len(rows)>1 else None
-                    # Preserve a newer valid legacy observation if one exists.
-                    if not s['observationDate'] or last['trade_date']>=s['observationDate']:
-                        s.update(status='available',observationDate=last['trade_date'],retrievedAt=last['fetched_at'],qualityFlag='validated_eod',rawChecksum=last['row_hash'],priceSource=last['source'])
-                        s['profile']['lastQuote']=float(last['close'])
-                        s.update(previousDate=previous['trade_date'] if previous else None,dailyChange=float(last['close'])-float(previous['close']) if previous else None,dailyChangePercent=(float(last['close'])/float(previous['close'])-1)*100 if previous else None)
-                        if selected=='SMDR.JK':s['history']=[{'date':r['trade_date'],'open':float(r['open']),'high':float(r['high']),'low':float(r['low']),'close':float(r['close']),'adjustedClose':None if r['adjusted_close'] is None else float(r['adjusted_close']),'volume':r['volume'],'periodStatus':'eod'} for r in rows]
-            except CloudUnavailable:pass
-        return {'mode':'supabase','generatedAt':max((r['retrieved_at'] for r in latest),default=now_iso()),'stocks':stocks,'eodSchema':eod_status,'extendedData':{'status':detail_status,'reason':'Vendor snapshots retain unknown publication dates. No generated fundamentals or point-in-time claims.'}}
+                if not rows:continue
+                last=rows[-1];previous=rows[-2] if len(rows)>1 else None
+                if stock['observationDate'] and last['trade_date']<stock['observationDate']:continue
+                stock.update(status='available',observationDate=last['trade_date'],retrievedAt=last['fetched_at'],qualityFlag='validated_eod',rawChecksum=last['row_hash'],priceSource=last['source'])
+                stock['profile']['lastQuote']=float(last['close'])
+                stock.update(previousDate=previous['trade_date'] if previous else None,dailyChange=float(last['close'])-float(previous['close']) if previous else None,dailyChangePercent=(float(last['close'])/float(previous['close'])-1)*100 if previous else None)
+                if selected==symbol:stock['history']=[{'date':r['trade_date'],'open':float(r['open']),'high':float(r['high']),'low':float(r['low']),'close':float(r['close']),'adjustedClose':None if r['adjusted_close'] is None else float(r['adjusted_close']),'volume':r['volume'],'periodStatus':'eod'} for r in rows]
+        except CloudUnavailable:pass
+        return {'mode':'supabase','generatedAt':max((s['retrievedAt'] for s in stocks if s['retrievedAt']),default=now_iso()),'stocks':stocks,'eodSchema':eod_status,'extendedData':{'status':detail_status,'reason':'Vendor snapshots retain unknown publication dates. No generated fundamentals or point-in-time claims.'}}
 
     def tracked(self):
         rows=self.request('companies?'+urlencode({'owner_id':'eq.'+self.owner,'active':'eq.true','select':'symbol,company_watchlist_members!inner(active)','company_watchlist_members.active':'eq.true','limit':201}))

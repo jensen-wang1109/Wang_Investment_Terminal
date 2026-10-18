@@ -1,0 +1,14 @@
+{
+  "holidays": ["2022-04-29", "2022-05-04", "2022-05-05", "2022-05-06", "2025-08-18"],
+  "sources": [
+    {
+      "url": "https://www.utrade.co.id/ViewImportantNotice.aspx?idNotice=910",
+      "document": "UOB Kay Hian published exchange calendar amendment for 2022 referring to the April 7, 2022 joint ministerial decree."
+    },
+    {
+      "url": "https://www.ksei.co.id/files/Pengumuman_Perubahan_Hari_Libur_dan_Cuti_Bersama_PT_KSEI_Tahun_2025.pdf",
+      "document": "KSEI announcement referencing IDX calendar amendment dated August 8, 2025; August 18 is an exchange holiday."
+    }
+  ],
+  "reviewed_on": "2026-10-18"
+}

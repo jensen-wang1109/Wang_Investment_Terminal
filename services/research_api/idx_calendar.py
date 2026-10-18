@@ -13,7 +13,8 @@ def sessions():
     record=json.loads((ROOT/'config/idx-calendar-2026.json').read_text())
     current={d.date().isoformat() for d in pd.date_range('2026-01-01','2026-12-31',freq='B')} - set(record['holidays'])
     if len(current)!=record['expected_sessions']:raise ValueError('Calendar checksum/session count mismatch')
-    return historical|current
+    amendments=json.loads((ROOT/'config/idx-calendar-amendments.json').read_text())
+    return (historical|current)-set(amendments['holidays'])
 
 def session_dates(start,end):
     if start<'2021-01-01' or end>'2026-12-31':raise ValueError('Calendar coverage is 2021–2026; review the next IDX holiday announcement before extending it')

@@ -35,6 +35,32 @@ class EodTests(unittest.TestCase):
         self.assertEqual(session_dates('2026-10-17','2026-10-18'),[])
         with self.assertRaises(ValueError):session_dates('2026-12-30','2027-01-01')
         self.assertEqual(eligible_end(NOW.replace(hour=16)),'2026-10-15')
+        self.assertEqual(session_dates('2022-04-29','2022-05-06'),[])
+        self.assertEqual(session_dates('2025-08-18','2025-08-18'),[])
+
+    def test_listing_date_excludes_pre_ipo_sessions_from_download(self):
+        class Provider:
+            def history(self,instrument,start,end):
+                self.start=start
+                return [DailyPrice('ADMR.JK','2026-10-16',100,110,90,105,None,1000,'IDR','yahoo',FETCH)]
+        provider=Provider();store=MemoryStore()
+        run_eod(ticker='ADMR.JK',backfill=True,provider=provider,store=store,now=NOW)
+        self.assertEqual(provider.start,'2022-01-03')
+
+    def test_download_options_preserve_raw_ohlc_and_adjusted_close(self):
+        import pandas as pd
+        from services.research_api.yahoo_eod import YahooEodProvider
+        from services.research_api.contracts import InstrumentRef
+        from types import SimpleNamespace
+        frame=pd.DataFrame({'Open':[100.0],'High':[110.0],'Low':[90.0],'Close':[105.0],'Adj Close':[99.0],'Volume':[1000]},index=pd.to_datetime(['2026-10-16']))
+        calls=[]
+        def download(symbol,**kwargs):calls.append((symbol,kwargs));return frame
+        bars=YahooEodProvider(loader=lambda _:SimpleNamespace(download=download)).history(InstrumentRef('BBCA.JK','IDX','IDR','Asia/Jakarta'),'2026-10-16','2026-10-17')
+        self.assertEqual(bars[0].close,105);self.assertEqual(bars[0].adjusted_close,99)
+        self.assertFalse(calls[0][1]['auto_adjust']);self.assertFalse(calls[0][1]['threads'])
+        self.assertEqual(calls[0][1]['interval'],'1d')
+        frame.drop(frame.index,inplace=True)
+        with self.assertRaises(ValueError):YahooEodProvider(loader=lambda _:SimpleNamespace(download=download)).history(InstrumentRef('BBCA.JK','IDX','IDR','Asia/Jakarta'),'2026-10-16','2026-10-17')
 
     def test_validation_rejects_corrupt_batches(self):
         for high in (80,float('nan'),float('inf')):
