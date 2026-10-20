@@ -17,9 +17,9 @@ THEMES=[
   'confirm':['Realisasi volume biodiesel dan konsumsi CPO.','Tren harga CPO, margin dan volume produksi emiten.'],
   'reference':'https://esdm.go.id/id/media-center/arsip-berita/luncurkan-mandatori-b50-esdm-tegaskan-kesiapan-indonesia-perkuat-kedaulatan-energi'},
  {'id':'energy','title':'Energi, migas & rantai transportasi','pattern':r'krisis energi|harga minyak|pasokan minyak|selat hormuz|harga batu ?bara|ketahanan energi',
-  'industry':r'oil|gas|coal|geothermal',
+  'industry':r'oil & gas|oil, gas|coal|geothermal|renewable energy',
   'thesis':'Harga energi tinggi dapat mendukung produsen migas dan alternatif batu bara. Transportasi tanker perlu dikaji terpisah: tarif, utilisasi, charter dan risiko rute menentukan dampaknya; biaya bunker yang naik dapat menjadi tekanan.',
-  'risks':['Harga minyak naik tidak otomatis menguntungkan semua perusahaan pelayaran.','Normalisasi pasokan, penurunan tarif angkut, volume rendah atau pembatasan ekspor dapat membalik tesis.'],
+  'risks':['Harga minyak naik tidak otomatis menguntungkan semua perusahaan pelayaran.','Batu bara metalurgi berbeda dari thermal coal; substitusi energi tidak otomatis meningkatkan semua jenis batu bara.','Normalisasi pasokan, penurunan tarif angkut, volume rendah atau pembatasan ekspor dapat membalik tesis.'],
   'confirm':['Harga komoditas dan forward curve; volume serta biaya produksi.','Tarif charter/tanker dan bunker; kontrak spot versus jangka panjang.'],
   'reference':'https://www.iea.org/reports/oil-market-report-june-2026'},
  {'id':'ai_infrastructure','title':'Infrastruktur AI, listrik & logam','pattern':r'pusat data|data cent(?:er|re)|kecerdasan buatan|infrastruktur ai|\bai\b.*(?:tembaga|timah|aluminium|listrik)',
@@ -79,8 +79,8 @@ def candidates_from_news(rows,mapping,previous,now):
         fresh=any(instant(a['published_at'])>=now-timedelta(hours=48) for a in evidence)
         if len(providers)<2 or not fresh:
             if prior:
-                candidate={**prior['payload'],'status':'expired','evidence':evidence,'providers':providers,'updated_at':now.isoformat()}
-                candidate['material_key']=hashlib.sha256((theme['id']+':expired').encode()).hexdigest();result.append(candidate)
+                candidate={**prior['payload'],'status':'expired','rule_version':'sector-event-v2','evidence':evidence,'providers':providers,'updated_at':now.isoformat()}
+                candidate['material_key']=hashlib.sha256((theme['id']+':expired:sector-event-v2').encode()).hexdigest();result.append(candidate)
             continue
         adverse=[a for a in evidence if re.search(ADVERSE,a['title'],re.I)];support=[a for a in evidence if re.search(SUPPORT,a['title'],re.I)]
         if theme['id']=='monetary':
@@ -89,17 +89,19 @@ def candidates_from_news(rows,mapping,previous,now):
         # Energy crisis is a catalyst with two-sided effects, not universally bad.
         if theme['id']=='energy':adverse=[a for a in evidence if re.search(r'ditunda|dibatalkan|merosot|anjlok|gagal',a['title'],re.I)]
         status='contested' if adverse and support else 'risk' if adverse else 'supported' if support else 'watch'
-        stage='execution' if any(re.search(r'resmi|luncur|realisasi|kontrak',a['title'],re.I) for a in support) else 'developing'
+        stage='execution' if any(not re.search(r'\?|diprediksi|diproyeksi|berpotensi|\bakan\b|rencana|berencana|menargetkan|menunggu',a['title'],re.I)
+            and re.search(r'resmi|diluncurkan|terealisasi|realisasi|menandatangani|meneken kontrak|raih kontrak|mendapat kontrak',a['title'],re.I) for a in support) else 'developing'
         industries={}
         for ticker,info in mapping.items():
             if re.search(theme['industry'],info['industry'],re.I):industries.setdefault((info['sector'],info['industry']),[]).append(ticker)
         candidate={k:v for k,v in theme.items() if k not in ('pattern','industry')}
-        candidate.update(status=status,stage=stage,providers=providers,evidence=evidence,
+        candidate.update(status=status,stage=stage,rule_version='sector-event-v2',providers=providers,evidence=evidence,
             industries=[{'sector':s,'industry':i,'tickers':sorted(t)} for (s,i),t in industries.items()],
             updated_at=now.isoformat(),horizon='1-6 bulan: horizon riset, bukan target waktu pasti',research_only=True,
             evidence_strength='Penerbit beragam; independensi laporan dan isi artikel belum diverifikasi')
         # More headlines of the same stage/status do not create repeat notifications.
-        candidate['material_key']=hashlib.sha256(json.dumps({'id':theme['id'],'status':status,'stage':stage},sort_keys=True).encode()).hexdigest()
+        candidate['material_key']=hashlib.sha256(json.dumps({'id':theme['id'],'status':status,'stage':stage,'rule_version':'sector-event-v2',
+            'industries':[(s,i,sorted(t)) for (s,i),t in sorted(industries.items())]},sort_keys=True).encode()).hexdigest()
         result.append(candidate)
     return result
 

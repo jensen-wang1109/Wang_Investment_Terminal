@@ -55,7 +55,10 @@ begin
   if previous.updated_at>checked_at then continue; end if;
   if previous.material_key is not distinct from candidate->>'material_key' then continue; end if;
   next_revision=coalesce(previous.revision,0)+1;
-  should_notify=(candidate->>'status'='supported') or (previous.revision is not null and previous.payload->>'status' is distinct from candidate->>'status');
+  should_notify=case when previous.revision is null then candidate->>'status'='supported'
+   when previous.payload->>'rule_version' is distinct from candidate->>'rule_version' then false
+   else (previous.payload->>'status' is distinct from candidate->>'status')
+    or (candidate->>'status'='supported' and previous.payload->>'stage' is distinct from candidate->>'stage') end;
   insert into investment.sector_opportunity_state(owner_id,theme_id,material_key,revision,updated_at,payload)
    values(target_owner,candidate->>'id',candidate->>'material_key',next_revision,checked_at,candidate)
    on conflict(owner_id,theme_id) do update set material_key=excluded.material_key,revision=excluded.revision,updated_at=excluded.updated_at,payload=excluded.payload;

@@ -44,6 +44,12 @@ class SectorTrendTests(unittest.TestCase):
         c=candidates_from_news(rows,MAPPING,[],NOW)[0]
         self.assertEqual(c['id'],'monetary');self.assertEqual(c['status'],'risk')
 
+    def test_energy_mapping_excludes_palm_oil_and_plans_are_not_execution(self):
+        mapping={**MAPPING,'MEDC.JK':{'sector':'IDXENERGY','industry':'Oil & Gas'}}
+        rows=[news('Harga minyak naik, produsen menargetkan kontrak baru','a'),news('Harga minyak meningkat, perusahaan akan meneken kontrak','b','Bisnis.com')]
+        c=candidates_from_news(rows,mapping,[],NOW)[0]
+        self.assertEqual(c['stage'],'developing');self.assertEqual(c['industries'][0]['tickers'],['MEDC.JK'])
+
     def test_purged_splits_have_no_label_overlap_and_are_chronological(self):
         base=datetime(2021,1,1);rows=[]
         for i in range(200):
