@@ -5,6 +5,12 @@ from services.research_api.news_analyzer import build_report
 from services.research_api.analyzer_pdf import render_brief
 
 class AnalyzerPdfTests(unittest.TestCase):
+    def test_empty_evidence_report_remains_downloadable_without_invented_sources(self):
+        from pypdf import PdfReader
+        report=build_report([],datetime(2026,10,20,5,tzinfo=timezone.utc))
+        pdf=PdfReader(BytesIO(render_brief(report)));text='\n'.join(p.extract_text() for p in pdf.pages)
+        self.assertIn('Belum ada sumber berita',text);self.assertIn('0 judul',text)
+
     def test_pdf_contains_real_report_identity_and_clickable_source_without_remote_assets(self):
         from pypdf import PdfReader
         row={'id':'one','title':'IHSG menguat & investor menunggu <konfirmasi>','provider':'ANTARA','url':'https://www.antaranews.com/test',

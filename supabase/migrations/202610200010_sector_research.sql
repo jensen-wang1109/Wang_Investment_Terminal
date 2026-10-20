@@ -81,5 +81,19 @@ begin
 end $$;
 revoke all on function investment.read_sector_notification(uuid,uuid) from public,anon,authenticated;
 grant execute on function investment.read_sector_notification(uuid,uuid) to service_role;
+-- Morning/closing and opportunity jobs can collect the same new RSS item.
+-- Preserve earliest knowledge time and the latest snapshot atomically.
+create or replace function investment.preserve_news_times()
+returns trigger language plpgsql set search_path=pg_catalog as $$
+declare earliest timestamptz;
+begin
+ earliest=least(old.first_seen_at,new.first_seen_at);
+ if new.retrieved_at<old.retrieved_at then new=old; end if;
+ new.first_seen_at=earliest;
+ return new;
+end $$;
+revoke all on function investment.preserve_news_times() from public,anon,authenticated;
+drop trigger if exists preserve_news_times on investment.news_items;
+create trigger preserve_news_times before update on investment.news_items for each row execute function investment.preserve_news_times();
 notify pgrst,'reload schema';
 commit;

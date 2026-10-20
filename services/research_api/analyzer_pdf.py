@@ -76,5 +76,6 @@ def render_brief(report):
     for number,row in sources.values():
         metadata=f'{row["provider"]} | {when(row["published_at"])} | '
         story.append(KeepTogether([p(f'{number}. {row["title"]}',small),Paragraph(text(metadata)+'<link href="'+escape(row['url'],quote=True)+'" color="#0b7770">Buka sumber</link>',small)]))
+    if not sources:story.append(p('Belum ada sumber berita yang memenuhi cakupan laporan ini.',small))
     doc.build(story,onFirstPage=footer,onLaterPages=footer)
     return out.getvalue()
