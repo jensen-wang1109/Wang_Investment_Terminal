@@ -64,6 +64,13 @@ class NewsAnalyzerTests(unittest.TestCase):
         r=build_report([article('IHSG naik'),article('IHSG turun','two')],CUTOFF)
         self.assertEqual(len(r['mixed']),1);self.assertIsNone(r['score'])
 
+    def test_topic_digest_covers_unscored_news_without_inventing_direction(self):
+        rows=[article('The Fed akan mengumumkan suku bunga','fed'),article('Rupiah menunggu keputusan BI','rp')]
+        r=build_report(rows,CUTOFF)
+        self.assertEqual(len(r['unclassified']),2);self.assertEqual(sum(d['article_count'] for d in r['digests']),2)
+        self.assertIn('suku bunga',r['digests'][0]['summary']);self.assertEqual(len(r['digests'][0]['evidence']),2)
+        self.assertIsNone(r['score'])
+
     def test_report_persists_and_is_verified_idempotently(self):
         c=FakeCloud();a=generate_daily_analysis(c,CUTOFF);b=generate_daily_analysis(c,CUTOFF)
         self.assertTrue(a['database_verified']);self.assertEqual(a,b);self.assertEqual(len(c.rows),1)

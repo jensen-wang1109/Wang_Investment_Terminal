@@ -33,6 +33,24 @@ RULES=[
  ('nickel','Harga nikel',r'harga nikel',0,'Perubahan harga nikel relevan bagi produsen logam; dampak laba perlu dikonfirmasi dengan biaya dan volume.')
 ]
 UNCERTAIN=r'\?|\b(?:diprediksi|diproyeksi|diperkirakan|berpotensi|diprakirakan|proyeksi|prediksi|bakal|akan|berharap|target|jika|meski|walau|namun|tetapi|bukan|belum|tidak|gagal|batal|bantah|cegah)\b'
+TOPIC_TERMS=[('IHSG & pasar saham',r'ihsg|bursa|pasar saham'),('rupiah',r'rupiah'),
+ ('suku bunga & kebijakan moneter',r'suku bunga|bi[- ]rate|the fed|bank indonesia'),
+ ('inflasi',r'inflasi'),('pertumbuhan & perdagangan',r'pertumbuhan|ekspor|impor|pdb|perdagangan'),
+ ('emas',r'emas'),('energi',r'minyak|batu ?bara|migas|energi'),('logam',r'nikel|tembaga|timah'),
+ ('sawit',r'cpo|sawit'),('kinerja & pendanaan emiten',r'laba|pendapatan|kinerja|obligasi|kredit|pendanaan'),
+ ('aksi korporasi & keterbukaan',r'dividen|rapat umum|keterbukaan|pembelian kembali|laporan keuangan|rups')]
+
+def topic_digest(articles):
+    """Descriptive coverage of ALL eligible news, including unscored headlines."""
+    result=[]
+    for topic in dict.fromkeys(a.get('topic') or 'Berita lainnya' for a in articles):
+        rows=[a for a in articles if (a.get('topic') or 'Berita lainnya')==topic]
+        subjects=sorted(((name,sum(bool(re.search(pattern,a['title'].casefold())) for a in rows)) for name,pattern in TOPIC_TERMS),key=lambda pair:-pair[1])
+        subjects=[name for name,count in subjects if count][:3]
+        result.append({'topic':topic,'article_count':len(rows),
+            'summary':f"{len(rows)} judul dari {len({a['provider'] for a in rows})} penerbit. "+('Sorotan judul: '+', '.join(subjects)+'.' if subjects else 'Perkembangan bisnis dan pengumuman emiten; dampak arah pasar belum disimpulkan.'),
+            'evidence':rows[:5]})
+    return result
 
 def instant(value):
     try:
@@ -102,6 +120,7 @@ def build_report(articles,cutoff=None):
             'window_start':start.isoformat(),'window_end':cutoff.isoformat(),'method':VERSION,'label':label,'score':score,
             'article_count':len(eligible),'providers':providers,'excluded':dict(excluded),'summary':summary,'conclusion':conclusion,
             'positive':positive,'negative':negative,'mixed':mixed,'unclassified':unclassified,
+            'digests':topic_digest(eligible),
             'method_note':'Aturan judul berita, bukan model AI/ML. Skor = 100 × (tema positif − tema negatif) / tema berarah. Setiap tema memiliki satu suara, berapa pun jumlah artikelnya. Minimal 3 tema berarah, 5 judul unik, dan 2 penerbit. Skor bukan probabilitas, return, atau rekomendasi transaksi.',
             'scope_note':'Hanya judul dan metadata; isi artikel belum dibaca. Dampak sektoral adalah hipotesis bersyarat. Berita tanpa waktu publikasi dan judul ambigu tidak diberi skor.'}
 
