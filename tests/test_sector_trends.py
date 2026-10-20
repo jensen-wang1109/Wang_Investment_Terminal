@@ -1,6 +1,6 @@
 import copy,unittest,math
 from datetime import datetime,timedelta,timezone
-from services.research_api.sector_trends import candidates_from_news
+from services.research_api.sector_trends import candidates_from_news,macro_snapshot
 from services.research_api.sector_model import splits,predict,feature_panel,HORIZONS
 
 NOW=datetime(2026,10,20,12,tzinfo=timezone.utc)
@@ -10,6 +10,13 @@ def news(title,id,provider='ANTARA',age=1):
     return {'id':id,'title':title,'url':host+id,'provider':provider,'published_at':(NOW-timedelta(hours=age)).isoformat(),'first_seen_at':(NOW-timedelta(minutes=1)).isoformat(),'topic':'Bisnis & Market','quality_flag':'rss_headline_only'}
 
 class SectorTrendTests(unittest.TestCase):
+    def test_macro_freshness_preserves_quarterly_publication_lag(self):
+        class Cloud:
+            owner='unit'
+            def request(self,path):return [{'generated_at':NOW.isoformat(),'payload':{'items':[{'id':'gdp','date':'2026-06-30','frequency':'quarterly','value':5.29,'unit':'%'}]}}]
+        snapshot=macro_snapshot(Cloud(),NOW)
+        self.assertFalse(snapshot['items'][0]['stale'])
+
     def test_new_evidence_same_stage_does_not_change_material_key(self):
         rows=[news('Mandatori B50 resmi diluncurkan','a'),news('Realisasi B50 meningkatkan serapan biodiesel','b','Bisnis.com')]
         first=candidates_from_news(rows,MAPPING,[],NOW)[0]

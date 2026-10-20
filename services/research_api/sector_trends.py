@@ -131,7 +131,7 @@ def macro_snapshot(cloud,now):
     result=rows[0]['payload']
     for item in result['items']:
         age=(now.date()-datetime.fromisoformat(item['date']).date()).days
-        limit=550 if item['frequency']=='annual' else 100 if item['frequency']=='quarterly' else 75 if item['frequency']=='monthly' else 7
+        limit={'annual':800,'quarterly':150,'monthly':70,'policy-event':180}.get(item['frequency'],7)
         item['stale']=age>limit;item['age_days']=age
     items={i['id']:i for i in result['items']};interpretations=[]
     for key,title,mechanism in [
