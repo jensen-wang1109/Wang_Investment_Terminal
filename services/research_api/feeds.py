@@ -16,6 +16,9 @@ TOPICS=('Bisnis & Market','Makro Indonesia','Makro Global','Komoditas','Keterbuk
 GOOGLE_FEEDS=[{'id':identifier,'provider':provider,'url':'https://news.google.com/rss/search?'+urlencode({'q':'site:'+domain+' (IHSG OR saham OR rupiah OR inflasi OR komoditas OR "The Fed" OR "keterbukaan informasi") when:7d','hl':'id','gl':'ID','ceid':'ID:id'}),'domains':list(PUBLISHERS[provider]),'region':'Indonesia','google_news':True}
     for identifier,provider,domain in [('google_bisnis','Bisnis.com','bisnis.com'),('google_kontan','Kontan','kontan.co.id'),('google_idx','IDX','idx.co.id')]]
 
+GOOGLE_FEEDS += [{'id':'google_themes_'+provider.lower().replace('.','_'),'provider':provider,'url':'https://news.google.com/rss/search?'+urlencode({'q':'site:'+domain+' (B50 OR biodiesel OR \"krisis energi\" OR \"pusat data\" OR \"harga minyak\" OR \"infrastruktur AI\") when:7d','hl':'id','gl':'ID','ceid':'ID:id'}),'domains':list(PUBLISHERS[provider]),'region':'Indonesia','google_news':True} for provider,domain in [('Bisnis.com','bisnis.com'),('Kontan','kontan.co.id')]]
+
+
 def google_news_url(url):
     try:
         p=urlparse(url)

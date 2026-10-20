@@ -135,10 +135,12 @@ def collect_inputs(cloud,cutoff):
         if len(page)<500:return result
     raise CloudUnavailable('News analysis input limit exceeded; report not replaced')
 
-def generate_daily_analysis(cloud=None,cutoff=None):
+def generate_daily_analysis(cloud=None,cutoff=None,session='manual'):
     cloud=cloud or SupabaseStore();cutoff=cutoff or datetime.now(timezone.utc);started=cutoff.isoformat();run=str(uuid.uuid4())
     try:
         report=build_report(collect_inputs(cloud,cutoff),cutoff)
+        report['session']=session
+        report['report_id']=hashlib.sha256((report['report_id']+':'+session).encode()).hexdigest()
         row={'owner_id':cloud.owner,'report_id':report['report_id'],'report_date':report['report_date'],
              'generated_at':report['generated_at'],'method':VERSION,'report':report}
         written=cloud.request('daily_market_analysis?on_conflict=owner_id,report_id',[row],prefer='resolution=ignore-duplicates,return=representation')
@@ -152,19 +154,22 @@ def generate_daily_analysis(cloud=None,cutoff=None):
         'finished_at':datetime.now(timezone.utc).isoformat(),'status':'success','inserted_rows':len(written or []),'duplicate_rows':0 if written else 1,'error_code':None}])
     return {'database_verified':True,'report_id':report['report_id'],'article_count':report['article_count'],'label':report['label']}
 
-def analysis_snapshot(cloud=None,day=None):
+def analysis_snapshot(cloud=None,day=None,report_id=None):
     cloud=cloud or SupabaseStore()
     if day:
         from datetime import date
         day=date.fromisoformat(day).isoformat()
     filters={'owner_id':'eq.'+cloud.owner,'select':'report','order':'generated_at.desc,report_id','limit':1}
     if day:filters['report_date']='eq.'+day
+    if report_id:
+        if not re.fullmatch(r'[0-9a-f]{64}',report_id):raise ValueError('Invalid report version')
+        filters['report_id']='eq.'+report_id
     rows=read(cloud,'daily_market_analysis?'+urlencode(filters))
     # Recent revisions, collapsed to one entry per Jakarta date for the picker.
-    history=read(cloud,'daily_market_analysis?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'report_date,generated_at','order':'generated_at.desc,report_id','limit':200}))
+    history=read(cloud,'daily_market_analysis?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'report_id,report_date,generated_at,session:report->>session','order':'generated_at.desc,report_id','limit':200}))
     days={}
     for r in history:days.setdefault(r['report_date'],r['generated_at'])
     logs=read(cloud,'ingestion_runs?'+urlencode({'owner_id':'eq.'+cloud.owner,'series_id':'eq.analysis.daily','select':'status,finished_at,error_code','order':'finished_at.desc','limit':1}))
     news_logs=read(cloud,'ingestion_runs?'+urlencode({'owner_id':'eq.'+cloud.owner,'series_id':'eq.news.market','select':'status,finished_at,error_code','order':'finished_at.desc','limit':1}))
-    return {'report':rows[0]['report'] if rows else None,'history':[{'date':d,'generated_at':v} for d,v in days.items()],
+    return {'report':rows[0]['report'] if rows else None,'history':[{'date':d,'generated_at':v} for d,v in days.items()],'versions':history,
             'last_attempt':logs[0] if logs else None,'news_sync':news_logs[0] if news_logs else None,'schedule':SCHEDULE,'cloud_persisted':True}

@@ -105,7 +105,9 @@ class SupabaseStore:
             change=next((r for r in changes if r['series_id']==sid),{})
             stocks[-1].update(dailyChange=value(change,'price_change'),dailyChangePercent=value(change,'price_change_percent'),previousDate=change.get('previous_date'),details=details if selected==symbol else None)
             if vendor:
-                stocks[-1]['profile'].update(name=vendor['profile'].get('longName') or vendor['profile'].get('shortName') or company['name'],businessSummary=vendor['profile'].get('longBusinessSummary'),vendorSector=vendor['profile'].get('sector'),vendorIndustry=vendor['profile'].get('industry'),financialCurrency=vendor['profile'].get('financialCurrency'),retrievedAt=vendor['retrieved_at'])
+                stocks[-1]['profile'].update(name=vendor['profile'].get('longName') or vendor['profile'].get('shortName') or company['name'],businessSummary=vendor['profile'].get('longBusinessSummary'),vendorSector=vendor['profile'].get('sector'),vendorIndustry=vendor['profile'].get('industry'),financialCurrency=vendor['profile'].get('financialCurrency'),retrievedAt=vendor['profile'].get('moduleStatus',{}).get('profile',{}).get('last_success_at') or vendor['retrieved_at'])
+                if selected==symbol:
+                    stocks[-1].update(news=vendor['profile'].get('news',[]),newsStatus=vendor['profile'].get('moduleStatus',{}).get('news',{'status':'not_synced'}))
         # Serve the daily database table through the existing frontend contract.
         eod_status='unavailable'
         try:
@@ -133,6 +135,31 @@ class SupabaseStore:
     def tracked(self):
         rows=self.request('companies?'+urlencode({'owner_id':'eq.'+self.owner,'active':'eq.true','select':'symbol,company_watchlist_members!inner(active)','company_watchlist_members.active':'eq.true','limit':201}))
         return [r['symbol'] for r in rows]
+
+    def admin_stocks(self):
+        companies=self.request('companies?'+urlencode({'owner_id':'eq.'+self.owner,'select':'id,symbol,name,active,company_watchlist_members(active)','order':'symbol','limit':1000}))
+        profiles=self.request('current_stock_company_snapshots?'+urlencode({'owner_id':'eq.'+self.owner,'select':'symbol,retrieved_at,profile,metrics','limit':1000}))
+        by_symbol={p['symbol']:p for p in profiles}
+        rows=[]
+        for c in companies:
+            p=by_symbol.get(c['symbol'],{})
+            rows.append({'symbol':c['symbol'],'name':p.get('profile',{}).get('longName') or c['name'],
+                'is_active':c['active'] and any(m['active'] for m in c['company_watchlist_members']),
+                'retrieved_at':p.get('retrieved_at'),'modules':p.get('profile',{}).get('moduleStatus',{}),
+                'metric_count':sum(v is not None for v in p.get('metrics',{}).values())})
+        return {'stocks':rows,'active_limit':200}
+
+    def set_stock_active(self,symbol,enabled,name=None):
+        if not isinstance(symbol,str):raise ValueError('Ticker wajib diisi')
+        symbol=symbol.strip().upper()
+        if not symbol.endswith('.JK'):symbol+='.JK'
+        if not re.fullmatch(r'[A-Z0-9]{3,10}\.JK',symbol):raise ValueError('Ticker IDX tidak valid')
+        if not isinstance(enabled,bool):raise ValueError('is_active harus boolean')
+        if name is not None and (not isinstance(name,str) or len(name)>200):raise ValueError('Nama maksimal 200 karakter')
+        result=self.request('rpc/set_stock_active',{'target_owner':self.owner,'target_symbol':symbol,'enabled':enabled,'company_name':name})
+        stored=next((r for r in self.admin_stocks()['stocks'] if r['symbol']==symbol),None)
+        if stored is None or stored['is_active']!=enabled:raise CloudUnavailable('Perubahan belum terverifikasi di database')
+        return {**result,'verified':True}
 
     def latest_date(self,series_id):
         rows=self.request('current_economic_observations?'+urlencode({'owner_id':'eq.'+self.owner,'series_id':'eq.'+series_id,'select':'observation_date','order':'observation_date.desc','limit':1}))
@@ -179,6 +206,30 @@ class SupabaseStore:
         templates=self.request('industry_kpi_templates?'+urlencode({'owner_id':'eq.'+self.owner,'select':'id,sector_id,industry_label,metrics,analyst_note,source_file,source_sha256,review_status','order':'industry_label','limit':200}))
         profiles=self.request('company_research_profiles?'+urlencode({'owner_id':'eq.'+self.owner,'select':'industry_label,template_id,sector_id,mapping_status,review_note,companies!inner(symbol,active)','companies.active':'eq.true','limit':200}))
         return {'sectors':sectors,'templates':templates,'profiles':profiles,'training_ready':False,'measurement_status':'Definitions only; measured KPI values are not inferred'}
+
+    def sector_tree(self):
+        sectors=self.request('sectors?'+urlencode({'owner_id':'eq.'+self.owner,'select':'id,stable_id,code,name','order':'code'}))
+        templates=self.request('industry_kpi_templates?'+urlencode({'owner_id':'eq.'+self.owner,'select':'id,sector_id,industry_label,metrics,analyst_note','limit':500}))
+        profiles=self.request('company_research_profiles?'+urlencode({'owner_id':'eq.'+self.owner,'select':'company_id,sector_id,industry_label,template_id,review_note','limit':500}))
+        companies=self.request('companies?'+urlencode({'owner_id':'eq.'+self.owner,'active':'eq.true','select':'id,symbol,name,company_watchlist_members!inner(active)','company_watchlist_members.active':'eq.true','order':'symbol','limit':201}))
+        if len(companies)>200:raise CloudUnavailable('Research universe exceeds 200 stocks')
+        by_company={c['id']:c for c in companies};assigned=set();branches={}
+        def key(sector,label):return (sector,' '.join(label.replace('<br>',' ').split()).casefold())
+        for t in templates:
+            branches[key(t['sector_id'],t['industry_label'])]={'id':t['id'],'sector_id':t['sector_id'],'name':t['industry_label'],'metrics':t['metrics'],'note':t['analyst_note'],'stocks':[]}
+        for p in profiles:
+            company=by_company.get(p['company_id'])
+            if not company:continue
+            k=key(p['sector_id'],p['industry_label'])
+            if k not in branches:
+                branches[k]={'id':'industry_'+hashlib.sha256((str(k[0])+':'+k[1]).encode()).hexdigest()[:16],'sector_id':p['sector_id'],'name':p['industry_label'],'metrics':[],'note':None,'stocks':[]}
+            branches[k]['stocks'].append({'symbol':company['symbol'],'name':company['name'],'review_note':p['review_note']});assigned.add(company['id'])
+        tree=[]
+        for sector in sectors:
+            industries=sorted((i for i in branches.values() if i['sector_id']==sector['id']),key=lambda i:i['name'].casefold())
+            tree.append({**sector,'industries':industries,'stock_count':sum(len(i['stocks']) for i in industries)})
+        return {'sectors':tree,'unmapped':[{'symbol':c['symbol'],'name':c['name']} for c in companies if c['id'] not in assigned],
+            'stock_count':len(companies),'industry_count':len(branches),'retrieved_at':now_iso(),'source':'Supabase · klasifikasi riset pribadi','training_ready':False}
 
     def storage(self):
         return self.request('rpc/infrastructure_storage',{})

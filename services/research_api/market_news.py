@@ -8,7 +8,7 @@ from .providers import retry_transient
 from .repository import now_iso
 
 SPECS=FEEDS+GOOGLE_FEEDS
-SCHEDULE={'time':'07:00','timezone':'Asia/Jakarta','days':'Setiap hari',
+SCHEDULE={'time':'07:00','close_time':'17:15','timezone':'Asia/Jakarta','days':'Pagi setiap hari; sore pada hari bursa IDX',
     'workflow_url':'https://github.com/jensen-wang1109/Wang_Investment_Terminal/actions/workflows/market-news.yml'}
 
 def read(cloud,path):return retry_transient(lambda:cloud.request(path))
