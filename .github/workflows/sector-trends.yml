@@ -22,12 +22,13 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install -r services/research_api/requirements-sector.txt openpyxl==3.1.5
+      - run: python -m pip install -r services/research_api/requirements-sector.txt -r services/research_api/requirements-reporting.txt pypdf==6.21.1 openpyxl==3.1.5
       - name: Verify temporal validation and opportunity deduplication
-        run: python -m unittest tests.test_sector_trends -v
+        run: python -m unittest tests.test_sector_trends tests.test_sector_intelligence -v
       - name: Refresh official macro sources; preserve cloud context on failure
         if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 0 * * *'
         continue-on-error: true
         run: python scripts/fetch-macro.py
       - name: Monitor evidence, train when due, publish only material changes
         run: python scripts/monitor-sector-trends.py
+

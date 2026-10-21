@@ -1,0 +1,11 @@
+{
+  "weights": {"macro":20,"supply_demand":20,"earnings":25,"catalyst":10,"valuation":15,"market":10},
+  "high":80,
+  "developing":65,
+  "watch":50,
+  "minimum_data_quality":80,
+  "score_change":10,
+  "cooldown_hours":72,
+  "max_industries":3,
+  "minimum_turnover_idr":1000000000
+}

@@ -9,9 +9,11 @@ import hashlib
 import io
 import json
 import math
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError,URLError
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / '.private' / 'macro' / 'raw'
@@ -28,16 +30,32 @@ def finite(value):
         return None
 
 def fetch(url, suffix):
-    request = Request(url)
-    with urlopen(request, timeout=20) as response:
-        body = response.read(20 * 1024 * 1024 + 1)
-        if len(body) > 20 * 1024 * 1024:
-            raise ValueError('Source response exceeded 20 MB')
-        modified = response.headers.get('Last-Modified')
-    checksum = hashlib.sha256(body).hexdigest()
     RAW.mkdir(parents=True, exist_ok=True)
+    index=RAW/('response-'+hashlib.sha256(url.encode()).hexdigest()+'.json')
+    if index.exists():
+        cache=json.loads(index.read_text(encoding='utf-8'))
+        if (datetime.now(timezone.utc)-datetime.fromisoformat(cache['fetched_at'])).total_seconds()<3600:
+            file=RAW/(cache['checksum']+suffix)
+            if file.exists():return file.read_bytes(),cache['checksum'],cache['modified'],cache['fetched_at']
+    for attempt in range(3):
+        try:
+            with urlopen(Request(url,headers={'User-Agent':'WangResearch/0.4 official dataset collector'}), timeout=20) as response:
+                body = response.read(20 * 1024 * 1024 + 1)
+                if len(body) > 20 * 1024 * 1024:raise ValueError('Source response exceeded 20 MB')
+                modified = response.headers.get('Last-Modified')
+            break
+        except HTTPError as error:
+            if error.code in (401,403,429) or error.code<500 or attempt==2:raise
+            time.sleep(.5*2**attempt)
+        except (URLError,TimeoutError):
+            if attempt==2:raise
+            time.sleep(.5*2**attempt)
+    checksum = hashlib.sha256(body).hexdigest()
     (RAW / f'{checksum}{suffix}').write_bytes(body)
-    return body, checksum, modified
+    if body.lstrip().lower().startswith((b'<!doctype html',b'<html')):raise ValueError('HTML response received instead of dataset; source unavailable')
+    fetched_at=datetime.now(timezone.utc).isoformat()
+    index.write_text(json.dumps({'checksum':checksum,'modified':modified,'fetched_at':fetched_at}),encoding='utf-8')
+    return body, checksum, modified,fetched_at
 
 def main():
     parser = argparse.ArgumentParser()
@@ -47,12 +65,13 @@ def main():
     retrieved = datetime.now(timezone.utc).isoformat()
     series, observations, sources, failures = [], [], [], []
 
-    def register(key, label, unit, frequency, source, source_url, description, rows, checksum=None, source_modified=None):
+    def register(key, label, unit, frequency, source, source_url, description, rows, checksum=None, source_modified=None,collected=None):
+        collected=collected or retrieved
         valid = sorted([row for row in rows if row[0] <= cutoff.isoformat()], key=lambda row: row[0])
-        series.append({'id': key, 'label': label, 'unit': unit, 'frequency': frequency, 'source': source, 'sourceUrl': source_url, 'description': description, 'coverageStart': valid[0][0] if valid else None, 'coverageEnd': valid[-1][0] if valid else None, 'retrievedAt': retrieved, 'rawChecksum': checksum, 'publicationKnown': False})
+        series.append({'id': key, 'label': label, 'unit': unit, 'frequency': frequency, 'source': source, 'sourceUrl': source_url, 'description': description, 'coverageStart': valid[0][0] if valid else None, 'coverageEnd': valid[-1][0] if valid else None, 'retrievedAt': collected, 'rawChecksum': checksum, 'publicationKnown': False})
         for period, value in valid:
-            observations.append({'seriesId': key, 'date': period, 'value': value, 'retrievedAt': retrieved, 'publishedAt': None, 'availableAt': None, 'sourceUrl': source_url, 'rawChecksum': checksum})
-        sources.append({'seriesId': key, 'url': source_url, 'sha256': checksum, 'retrievedAt': retrieved, 'sourceFileModifiedAt': source_modified})
+            observations.append({'seriesId': key, 'date': period, 'value': value, 'retrievedAt': collected, 'publishedAt': None, 'availableAt': None, 'sourceUrl': source_url, 'rawChecksum': checksum})
+        sources.append({'seriesId': key, 'url': source_url, 'sha256': checksum, 'retrievedAt': collected, 'sourceFileModifiedAt': source_modified})
 
     fred_specs = [
         ('fed', 'Fed target upper', '%', 'DFEDTARU'),
@@ -63,21 +82,23 @@ def main():
         ('wti', 'WTI spot, Cushing', 'USD / barrel', 'DCOILWTICO'),
         ('brent', 'Brent spot, Europe', 'USD / barrel', 'DCOILBRENTEU'),
     ]
+    fred_specs += [('us_cpi','US CPI all urban consumers','index 1982-84=100','CPIAUCSL'),
+                   ('us_industrial','US industrial production','index 2017=100','INDPRO')]
     for key, label, unit, provider_id in fred_specs:
         fred_url = f'https://fred.stlouisfed.org/graph/fredgraph.csv?id={provider_id}&cosd=2025-01-01'
         try:
-            body, checksum, modified = fetch(fred_url, '.csv')
+            body, checksum, modified,collected = fetch(fred_url, '.csv')
             table = list(csv.DictReader(io.StringIO(body.decode('utf-8-sig'))))
             if not table or provider_id not in table[0]:
                 raise ValueError('Unexpected FRED CSV columns')
             date_key = 'observation_date' if 'observation_date' in table[0] else 'DATE'
-            register(key, label, unit, 'daily', 'FRED / original official agency', f'https://fred.stlouisfed.org/series/{provider_id}', 'Public CSV export. US broad dollar index is not DXY. Daily gaps remain unavailable.', [(row[date_key], finite(row[provider_id])) for row in table], checksum, modified)
+            register(key, label, unit, 'monthly' if key in ('us_cpi','us_industrial') else 'daily', 'FRED / original official agency', f'https://fred.stlouisfed.org/series/{provider_id}', 'Public CSV export. US broad dollar index is not DXY. Release/vintage timestamps remain unknown; monthly FRED labels denote the month, not release date.', [(row[date_key], finite(row[provider_id])) for row in table], checksum, modified,collected)
         except Exception as error:
             failures.append({'provider': 'FRED', 'seriesId': key, 'error': str(error)})
 
     try:
         import pandas as pd
-        body, checksum, modified = fetch(WB_MONTHLY, '.xlsx')
+        body, checksum, modified,collected = fetch(WB_MONTHLY, '.xlsx')
         excel = pd.ExcelFile(io.BytesIO(body))
         sheet_name = next(name for name in excel.sheet_names if 'Monthly' in name)
         raw = pd.read_excel(excel, sheet_name=sheet_name, header=None)
@@ -85,6 +106,11 @@ def main():
         headers = [str(cell).strip() for cell in raw.iloc[header_index]]
         print('World Bank columns:', ', '.join(headers[:18]))
         specs = [('gold', 'Gold', 'Gold', 'USD / troy oz'), ('coal', 'Coal (Australia)', 'Coal, Australian', 'USD / tonne'), ('coal_sa', 'Coal (South Africa)', 'Coal, South African **', 'USD / tonne'), ('cpo', 'Palm oil', 'Palm oil', 'USD / tonne'), ('nickel', 'Nickel', 'Nickel', 'USD / tonne'), ('copper', 'Copper', 'Copper', 'USD / tonne'), ('wti_monthly', 'WTI monthly average', 'Crude oil, WTI', 'USD / barrel'), ('brent_monthly', 'Brent monthly average', 'Crude oil, Brent', 'USD / barrel')]
+        specs += [('silver','Silver','Silver','USD / troy oz'),('aluminium','Aluminium','Aluminum','USD / tonne'),
+                  ('tin','Tin','Tin','USD / tonne'),('gas_us','Natural gas US','Natural gas, US','USD / mmbtu'),
+                  ('gas_europe','Natural gas Europe','Natural gas, Europe','USD / mmbtu'),
+                  ('lng_japan','LNG Japan','Liquefied natural gas, Japan','USD / mmbtu'),
+                  ('wheat','Wheat US HRW','Wheat, US HRW','USD / tonne')]
         for key, label, column, unit in specs:
             if column not in headers:
                 failures.append({'provider': 'World Bank', 'seriesId': key, 'error': f'Column absent: {column}'})
@@ -99,16 +125,16 @@ def main():
                         # Monthly label represents that month, not daily spot data.
                         month_end = pd.Timestamp(year, month, 1) + pd.offsets.MonthEnd(0)
                         rows.append((month_end.date().isoformat(), finite(row.iloc[column_index])))
-            register(key, label, unit, 'monthly', 'World Bank Pink Sheet', 'https://www.worldbank.org/en/research/commodity-markets', f'Monthly benchmark average: {column}. Not daily spot/futures. Attribute World Bank and original providers; check workbook definitions.', rows, checksum, modified)
+            register(key, label, unit, 'monthly', 'World Bank Pink Sheet', 'https://www.worldbank.org/en/research/commodity-markets', f'Monthly benchmark average: {column}. Not daily spot/futures. Attribute World Bank and original providers; check workbook definitions.', rows, checksum, modified,collected)
     except Exception as error:
         failures.append({'provider': 'World Bank Pink Sheet', 'error': str(error)})
 
     for key, label, indicator, unit in [('id_gdp_annual', 'Indonesia GDP growth (annual)', 'NY.GDP.MKTP.KD.ZG', '% annual growth'), ('id_cpi_annual', 'Indonesia CPI inflation (annual average)', 'FP.CPI.TOTL.ZG', '% annual average')]:
         url = f'https://api.worldbank.org/v2/country/IDN/indicator/{indicator}?format=json&date=2010:{cutoff.year}&per_page=100'
         try:
-            body, checksum, modified = fetch(url, '.json')
+            body, checksum, modified,collected = fetch(url, '.json')
             data = json.loads(body)
-            register(key, label, unit, 'annual', 'World Bank WDI', f'https://data.worldbank.org/indicator/{indicator}?locations=ID', 'Annual WDI context. Not quarterly GDP / monthly headline inflation; revisions possible.', [(f'{row["date"]}-12-31', finite(row['value'])) for row in data[1]], checksum, modified)
+            register(key, label, unit, 'annual', 'World Bank WDI', f'https://data.worldbank.org/indicator/{indicator}?locations=ID', 'Annual WDI context. Not quarterly GDP / monthly headline inflation; revisions possible.', [(f'{row["date"]}-12-31', finite(row['value'])) for row in data[1]], checksum, modified,collected)
         except Exception as error:
             failures.append({'provider': 'World Bank WDI', 'seriesId': key, 'error': str(error)})
 

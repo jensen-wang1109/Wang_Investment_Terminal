@@ -121,7 +121,7 @@ def save_macro_context(cloud):
     combined={r['id']:r for r in prior[0]['payload']['items']} if prior else {}
     for item in items:
         if item['id'] not in combined or item['date']>=combined[item['id']]['date']:combined[item['id']]=item
-    payload={'items':list(combined.values()),'scope':'Snapshot resmi; frekuensi asli dipertahankan. Tidak menjadi fitur training tanpa vintage/availability historis.'}
+    payload={'items':list(combined.values()),'intelligence_dataset':dataset,'scope':'Snapshot resmi; frekuensi asli dipertahankan. Tidak menjadi fitur training tanpa vintage/availability historis.'}
     identity=hashlib.sha256(json.dumps(payload,sort_keys=True).encode()).hexdigest()
     cloud.request('sector_macro_context?on_conflict=owner_id,snapshot_id',[{'owner_id':cloud.owner,'snapshot_id':identity,'generated_at':dataset['generatedAt'],'payload':payload}],prefer='resolution=ignore-duplicates,return=representation')
     check=read(cloud,'sector_macro_context?'+urlencode({'owner_id':'eq.'+cloud.owner,'snapshot_id':'eq.'+identity,'select':'payload','limit':1}))
@@ -169,12 +169,14 @@ def run_monitor(cloud=None,refresh_news=True,force_train=False):
         now=datetime.now(timezone.utc)
         previous=read(cloud,'sector_opportunity_state?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'theme_id,payload,material_key,revision','limit':20}))
         news=news_inputs(cloud,now);candidates=candidates_from_news(news,mapping,previous,now)
-        outcome=cloud.request('rpc/publish_sector_updates',{'target_owner':cloud.owner,'candidates':candidates,'checked_at':now.isoformat()})
-        stored=read(cloud,'sector_opportunity_state?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'theme_id,material_key','limit':20}))
-        if any(not any(r['theme_id']==c['id'] and r['material_key']==c['material_key'] for r in stored) for c in candidates):raise CloudUnavailable('Opportunity state readback mismatch')
+        # Legacy headline cards stay archived. Only the evidence-gated v2 engine
+        # may publish new sector theses or notifications.
+        from .sector_intelligence import run_intelligence
+        intelligence=run_intelligence(cloud,mapping,news,rows,now)
+        outcome={'changed':intelligence['published'],'notifications_created':intelligence['notifications_created']}
         context={'model_id':model['model_id'],'price_as_of':audit['end'],'predictions':forecasts,'macro':macro_snapshot(cloud,now),
             'news_context':topic_digest([a for a in news if approved_article(a)]),
-            'news_count':len(news),'news_sync':news_result,'changes':outcome,'research_only':True,
+            'news_count':len(news),'news_sync':news_result,'changes':outcome,'intelligence':intelligence,'research_only':True,
             'scope':'Tesis berita berbasis aturan; probabilitas pada panel model hanya hasil eksperimen harga. Belum ada validasi prediksi gabungan berita/makro.'}
         from .idx_calendar import session_dates,eligible_end
         local_now=now.astimezone(timezone(timedelta(hours=7)))
@@ -199,7 +201,8 @@ def sector_snapshot(cloud=None):
     latest=next((r for r in runs if r['status'] in ('success','partial')),None)
     model=latest_model(cloud,latest['payload'].get('model_id') if latest else None)
     if model:model={k:v for k,v in model.items() if k!='current_predictions'};model['models']=[{k:v for k,v in m.items() if k!='parameters'} for m in model['models']]
-    return {'opportunities':states,'monitor':latest,'last_attempt':runs[0] if runs else None,'model':model,
+    from .sector_intelligence import intelligence_snapshot
+    return {'opportunities':states,'intelligence':intelligence_snapshot(cloud),'monitor':latest,'last_attempt':runs[0] if runs else None,'model':model,
         'schedule':'Pantau 07:30, 10:30, 13:30, 16:30 dan 19:30 WIB; publikasi/notifikasi hanya saat tesis berubah material.'}
 
 def notification_snapshot(cloud=None):
