@@ -28,6 +28,18 @@ FACTOR_LABELS = {'macro':'Macro alignment','supply_demand':'Supply–demand','ea
 def digest(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,ensure_ascii=False,allow_nan=False).encode()).hexdigest()
 
+def merge_macro_dataset(current,prior):
+    """An ephemeral CI checkout must not erase a failed provider's cloud history."""
+    result=copy.deepcopy(current)
+    series={s['id']:s for s in prior.get('series',[])}
+    series.update({s['id']:s for s in current.get('series',[])})
+    points={(p['seriesId'],p['date']):p for p in prior.get('observations',[])}
+    points.update({(p['seriesId'],p['date']):p for p in current.get('observations',[])})
+    sources={s['seriesId']:s for s in prior.get('sources',[])}
+    sources.update({s['seriesId']:s for s in current.get('sources',[])})
+    result.update(series=list(series.values()),observations=list(points.values()),sources=list(sources.values()))
+    return result
+
 def config():
     path=ROOT/'config/sector-intelligence.json'
     result=copy.deepcopy(DEFAULTS)
@@ -354,13 +366,13 @@ def publication_decision(session,previous,now,cfg):
     if elapsed<cfg['cooldown_hours'] and not urgent:return None
     return 'contrary_evidence_or_gate_lost' if old['status']=='High Conviction' and not strong else 'material_conviction_change'
 
-def run_intelligence(cloud,mapping,news,prices,now=None):
+def run_intelligence(cloud,mapping,news,prices,now=None,dataset=None):
     now=now or datetime.now(timezone.utc)
     macro_file=ROOT/'public/data/macro-history.json'
     # Remote jobs with a failed download still use the last verified cloud input.
     prior_rows=read(cloud,'sector_intelligence_evaluations?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'payload','order':'generated_at.desc','limit':1}))
     prior=prior_rows[0]['payload'] if prior_rows else {}
-    dataset=json.loads(macro_file.read_text(encoding='utf-8')) if macro_file.exists() else {}
+    dataset=copy.deepcopy(dataset) if dataset is not None else json.loads(macro_file.read_text(encoding='utf-8')) if macro_file.exists() else {}
     if not dataset.get('observations'):
         contexts=read(cloud,'sector_macro_context?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'payload','payload->intelligence_dataset':'not.is.null','order':'generated_at.desc','limit':1}))
         dataset=copy.deepcopy(contexts[0]['payload'].get('intelligence_dataset',{})) if contexts else {}

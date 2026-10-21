@@ -128,6 +128,15 @@ class IntelligenceTests(unittest.TestCase):
         domestic=next(r for r in regimes if r['id']=='domestic_financing')
         self.assertEqual(domestic['state'],'easing_constrained_by_fx');self.assertIn('inflation',domestic['missing_inputs'])
 
+    def test_ephemeral_cloud_runner_preserves_failed_provider_history(self):
+        from services.research_api.sector_intelligence import merge_macro_dataset
+        prior=dataset(('brent','gold'));current=dataset(('gold',));current['failures']=[{'provider':'FRED','seriesId':'brent'}]
+        merged=merge_macro_dataset(current,prior)
+        self.assertEqual({s['id'] for s in merged['series']},{'gold','brent'})
+        self.assertEqual(len(merged['observations']),len(prior['observations']))
+        self.assertIsNone(next(p for p in merged['observations'] if p['seriesId']=='brent')['publishedAt'])
+        self.assertEqual(merged['failures'],current['failures'])
+
     def test_two_page_pdf_is_revision_exact_with_real_links_no_raster_assets(self):
         from services.research_api.sector_thesis_pdf import render_sector_thesis
         from pypdf import PdfReader

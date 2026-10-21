@@ -121,11 +121,15 @@ def save_macro_context(cloud):
     combined={r['id']:r for r in prior[0]['payload']['items']} if prior else {}
     for item in items:
         if item['id'] not in combined or item['date']>=combined[item['id']]['date']:combined[item['id']]=item
+    from .sector_intelligence import merge_macro_dataset
+    prior_dataset=prior[0]['payload'].get('intelligence_dataset',{}) if prior else {}
+    dataset=merge_macro_dataset(dataset,prior_dataset)
     payload={'items':list(combined.values()),'intelligence_dataset':dataset,'scope':'Snapshot resmi; frekuensi asli dipertahankan. Tidak menjadi fitur training tanpa vintage/availability historis.'}
     identity=hashlib.sha256(json.dumps(payload,sort_keys=True).encode()).hexdigest()
     cloud.request('sector_macro_context?on_conflict=owner_id,snapshot_id',[{'owner_id':cloud.owner,'snapshot_id':identity,'generated_at':dataset['generatedAt'],'payload':payload}],prefer='resolution=ignore-duplicates,return=representation')
     check=read(cloud,'sector_macro_context?'+urlencode({'owner_id':'eq.'+cloud.owner,'snapshot_id':'eq.'+identity,'select':'payload','limit':1}))
     if not check or check[0]['payload']!=payload:raise CloudUnavailable('Macro context readback mismatch')
+    return dataset
 
 def macro_snapshot(cloud,now):
     rows=read(cloud,'sector_macro_context?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'payload,generated_at','order':'generated_at.desc','limit':1}))
@@ -165,14 +169,14 @@ def run_monitor(cloud=None,refresh_news=True,force_train=False):
             forecasts=model['current_predictions'];audit=model['audit']
         else:
             _,latest,audit=feature_panel(rows,mapping);forecasts=predict(model,latest)
-        save_macro_context(cloud)
+        macro_dataset=save_macro_context(cloud)
         now=datetime.now(timezone.utc)
         previous=read(cloud,'sector_opportunity_state?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'theme_id,payload,material_key,revision','limit':20}))
         news=news_inputs(cloud,now);candidates=candidates_from_news(news,mapping,previous,now)
         # Legacy headline cards stay archived. Only the evidence-gated v2 engine
         # may publish new sector theses or notifications.
         from .sector_intelligence import run_intelligence
-        intelligence=run_intelligence(cloud,mapping,news,rows,now)
+        intelligence=run_intelligence(cloud,mapping,news,rows,now,dataset=macro_dataset)
         outcome={'changed':intelligence['published'],'notifications_created':intelligence['notifications_created']}
         context={'model_id':model['model_id'],'price_as_of':audit['end'],'predictions':forecasts,'macro':macro_snapshot(cloud,now),
             'news_context':topic_digest([a for a in news if approved_article(a)]),
