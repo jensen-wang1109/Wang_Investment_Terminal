@@ -26,9 +26,9 @@ jobs:
       - name: Verify temporal validation and opportunity deduplication
         run: python -m unittest tests.test_sector_trends tests.test_sector_intelligence -v
       - name: Refresh official macro sources; preserve cloud context on failure
+        timeout-minutes: 4
         if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 0 * * *'
         continue-on-error: true
         run: python scripts/fetch-macro.py
       - name: Monitor evidence, train when due, publish only material changes
         run: python scripts/monitor-sector-trends.py
-

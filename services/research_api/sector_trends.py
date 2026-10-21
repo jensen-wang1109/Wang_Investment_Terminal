@@ -177,13 +177,13 @@ def run_monitor(cloud=None,refresh_news=True,force_train=False):
         context={'model_id':model['model_id'],'price_as_of':audit['end'],'predictions':forecasts,'macro':macro_snapshot(cloud,now),
             'news_context':topic_digest([a for a in news if approved_article(a)]),
             'news_count':len(news),'news_sync':news_result,'changes':outcome,'intelligence':intelligence,'research_only':True,
-            'scope':'Tesis berita berbasis aturan; probabilitas pada panel model hanya hasil eksperimen harga. Belum ada validasi prediksi gabungan berita/makro.'}
+            'scope':'Macro–industry intelligence dengan evidence gate. Probabilitas ML tetap eksperimen harga; belum ada validasi prediksi gabungan berita/makro.'}
         from .idx_calendar import session_dates,eligible_end
         local_now=now.astimezone(timezone(timedelta(hours=7)))
         eligible=session_dates((local_now.date()-timedelta(days=15)).isoformat(),eligible_end(local_now))
         context['expected_price_date']=eligible[-1] if eligible else None
         context['price_stale']=bool(eligible and audit['end']<eligible[-1])
-        status='partial' if news_result and news_result['status']!='success' else 'success'
+        status='partial' if (news_result and news_result['status']!='success') or intelligence['macro_status']!='available' else 'success'
         row={'owner_id':cloud.owner,'run_id':run,'generated_at':now.isoformat(),'status':status,'payload':context}
         cloud.request('sector_monitor_runs',[row])
         check=read(cloud,'sector_monitor_runs?'+urlencode({'owner_id':'eq.'+cloud.owner,'run_id':'eq.'+run,'select':'payload','limit':1}))
@@ -198,7 +198,8 @@ def sector_snapshot(cloud=None):
     cloud=cloud or SupabaseStore();filters={'owner_id':'eq.'+cloud.owner}
     states=read(cloud,'sector_opportunity_state?'+urlencode({**filters,'select':'theme_id,revision,updated_at,payload','order':'updated_at.desc','limit':20}))
     runs=read(cloud,'sector_monitor_runs?'+urlencode({**filters,'select':'generated_at,status,payload','order':'generated_at.desc','limit':20}))
-    latest=next((r for r in runs if r['status'] in ('success','partial')),None)
+    success=read(cloud,'sector_monitor_runs?'+urlencode({**filters,'status':'in.(success,partial)','select':'generated_at,status,payload','order':'generated_at.desc','limit':1}))
+    latest=success[0] if success else None
     model=latest_model(cloud,latest['payload'].get('model_id') if latest else None)
     if model:model={k:v for k,v in model.items() if k!='current_predictions'};model['models']=[{k:v for k,v in m.items() if k!='parameters'} for m in model['models']]
     from .sector_intelligence import intelligence_snapshot

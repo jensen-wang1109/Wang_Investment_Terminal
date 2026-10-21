@@ -65,6 +65,13 @@ GRAPH = [
   winners=[edge('Gold mining',r'^Gold$',r'gold|mining',1,'Selisih realised gold price dan AISC menentukan margin, bukan harga emas saja.','Ounces, AISC, reserve life, royalti, hedging')],
   losers=[{'industry':'Price-sensitive jewellery','mechanism':'Harga tinggi dapat menekan volume perhiasan; tidak menyiratkan saham bank harus turun.'}],
   invalidate=['AISC, capex atau royalti naik lebih cepat dari realised gold price.','Volume turun atau valuasi sudah mencerminkan gold rally.'],checks=['ETF / physical demand dan real yields','Produksi, AISC, hedge dan valuasi'],reference='https://www.gold.org/goldhub/research'),
+ dict(id='v2_biodiesel',title='Biodiesel policy & palm demand',kind='Policy / physical demand',keys=['cpo'],pattern=r'\bb[345]0\b|\bb35\b|biodiesel|fame',
+  chain=['Mandat blending, alokasi dan pendanaan','Realisasi volume FAME dan serapan feedstock','CPO spread, pungutan dan utilisasi','Laba upstream vs margin processor / konsumen','Valuasi setelah volume dan margin terkonfirmasi'],
+  winners=[edge('Palm upstream',r'^Palm Oil$|^Agricultural Products',r'palm|plantation',1,'Serapan feedstock dapat mendukung ASP; yield, biaya dan pungutan menentukan laba.','Realisasi blending, tonase CPO, produksi, yield dan margin'),
+   edge('Qualified FAME processing',r'^Staple Food Producers',r'biodiesel|biofuel|fame',1,'Alokasi FAME dapat menambah utilisasi jika biaya feedstock dan insentif mendukung spread.','Bukti produsen FAME, alokasi, realisasi, subsidi dan processing margin')],
+  losers=[{'industry':'Unhedged palm downstream users','mechanism':'Feedstock lebih mahal dapat mengurangi margin pengolah makanan; serapan belum sama dengan keuntungan.'}],
+  invalidate=['Implementasi / pendanaan tertunda atau blending aktual tidak bertambah.','CPO supply squeeze, pungutan atau biaya meniadakan volume / ASP lebih tinggi.'],
+  checks=['Keputusan resmi vs volume aktual, bukan rencana B50 saja','CPO / biodiesel spread, biaya, pungutan dan subsidi'],reference='https://www.esdm.go.id/id/media-center/arsip-berita/penetapan-alokasi-biodiesel-tahun-2023-sebesar-1315-juta-kiloliter'),
  dict(id='v2_food',title='Food supply disruption',kind='Commodity / weather',keys=['cpo','wheat'],pattern=r'krisis pangan|pasokan pangan|larangan ekspor|el nino|harga gandum|harga cpo',
   chain=['Cuaca / pembatasan pasokan komoditas tertentu','Harga crop yang tepat dan inventory','ASP produsen vs feedstock pengguna','Yield, volume, spread dan margin','Earnings expectations dan harga saham'],
   winners=[edge('Palm upstream',r'^Palm Oil$|^Agricultural Products',r'palm|plantation',1,'ASP CPO dapat membantu upstream hanya jika yield dan biaya tidak memburuk.','Komoditas spesifik, tonase, yield, CPO spread dan biaya')],
@@ -384,14 +391,16 @@ def run_intelligence(cloud,mapping,news,prices,now=None):
     for s in stable['sessions']:s.pop('updated_at',None)
     result['evaluation_id']=digest(stable)
     existing=read(cloud,'sector_intelligence_evaluations?'+urlencode({'owner_id':'eq.'+cloud.owner,'evaluation_id':'eq.'+result['evaluation_id'],'select':'payload','limit':1}))
-    if existing and not publications:return {'published':0,'notifications_created':0,'database_verified':True,'evaluation_id':result['evaluation_id'],'eligible_industries':len(result['top_industries']),'unchanged':True}
+    coverage={'macro_status':'partial' if result['external_failures'] else 'available' if result['macro'] else 'unavailable',
+        'indicator_count':len(result['macro']),'session_count':len(result['sessions'])}
+    if existing and not publications:return {'published':0,'notifications_created':0,'database_verified':True,'evaluation_id':result['evaluation_id'],'eligible_industries':len(result['top_industries']),'unchanged':True,**coverage}
     outcome=cloud.request('rpc/publish_sector_intelligence',{'target_owner':cloud.owner,'evaluation':result,'proposals':publications})
     check=read(cloud,'sector_intelligence_evaluations?'+urlencode({'owner_id':'eq.'+cloud.owner,'evaluation_id':'eq.'+result['evaluation_id'],'select':'payload','limit':1}))
     if not check or check[0]['payload']!=result:raise CloudUnavailable('Intelligence evaluation readback mismatch')
     for p in publications:
         found=read(cloud,'sectoral_thesis_revisions?'+urlencode({'owner_id':'eq.'+cloud.owner,'session_id':'eq.'+p['id'],'order':'revision.desc','select':'payload','limit':1}))
         if not found or found[0]['payload'].get('content_key')!=p['content_key']:raise CloudUnavailable('Thesis publication readback mismatch')
-    return {**outcome,'database_verified':True,'evaluation_id':result['evaluation_id'],'eligible_industries':len(result['top_industries'])}
+    return {**outcome,'database_verified':True,'evaluation_id':result['evaluation_id'],'eligible_industries':len(result['top_industries']),**coverage}
 
 def intelligence_snapshot(cloud,session_id=None,revision=None):
     if session_id and not re.fullmatch(r'v2_[a-z_]{1,50}',session_id):raise ValueError('Invalid session')

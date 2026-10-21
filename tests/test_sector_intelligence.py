@@ -122,6 +122,12 @@ class IntelligenceTests(unittest.TestCase):
         self.assertIsNone(publication_decision(s,previous,NOW+timedelta(hours=1),config()))
         self.assertEqual(publication_decision(s,previous,NOW+timedelta(days=4),config()),'material_conviction_change')
 
+    def test_easing_with_currency_pressure_is_not_unqualified_support(self):
+        from services.research_api.sector_intelligence import joint_regimes
+        regimes=joint_regimes([{'id':'bi','regime':'falling','stale':False},{'id':'usdidr','regime':'rising','stale':False}])
+        domestic=next(r for r in regimes if r['id']=='domestic_financing')
+        self.assertEqual(domestic['state'],'easing_constrained_by_fx');self.assertIn('inflation',domestic['missing_inputs'])
+
     def test_two_page_pdf_is_revision_exact_with_real_links_no_raster_assets(self):
         from services.research_api.sector_thesis_pdf import render_sector_thesis
         from pypdf import PdfReader
@@ -134,5 +140,35 @@ class IntelligenceTests(unittest.TestCase):
         self.assertIn('not success probabilities',text)
         self.assertTrue(any(p.get('/Annots') for p in reader.pages))
         self.assertFalse(any(list(p.images) for p in reader.pages))
+
+class MacroTransportTests(unittest.TestCase):
+    def setUp(self):
+        import importlib.util,tempfile
+        from pathlib import Path
+        spec=importlib.util.spec_from_file_location('macro_collector_test',Path(__file__).resolve().parents[1]/'scripts/fetch-macro.py')
+        self.module=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.module)
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup);self.module.RAW=Path(self.temp.name)
+
+    def test_cached_response_preserves_real_collection_clock(self):
+        from unittest.mock import patch,MagicMock
+        response=MagicMock();response.__enter__.return_value=response;response.read.return_value=b'observation_date,DFEDTARU\n2026-10-20,4.0\n';response.headers={}
+        with patch.object(self.module,'urlopen',return_value=response) as download:
+            first=self.module.fetch('https://fred.stlouisfed.org/test','.csv')
+            second=self.module.fetch('https://fred.stlouisfed.org/test','.csv')
+        self.assertEqual(download.call_count,1);self.assertEqual(first,second)
+
+    def test_access_denial_is_not_retried(self):
+        from unittest.mock import patch
+        from urllib.error import HTTPError
+        with patch.object(self.module,'urlopen',side_effect=HTTPError('https://fred.stlouisfed.org/test',403,'denied',{},None)) as download,patch.object(self.module.time,'sleep') as sleep:
+            with self.assertRaises(HTTPError):self.module.fetch('https://fred.stlouisfed.org/test','.csv')
+        self.assertEqual(download.call_count,1);sleep.assert_not_called()
+
+    def test_html_is_not_cached_as_a_successful_data_response(self):
+        from unittest.mock import patch,MagicMock
+        response=MagicMock();response.__enter__.return_value=response;response.read.return_value=b'<!doctype html><html>Unavailable</html>';response.headers={}
+        with patch.object(self.module,'urlopen',return_value=response):
+            with self.assertRaisesRegex(ValueError,'HTML response'):self.module.fetch('https://fred.stlouisfed.org/test','.csv')
+        self.assertEqual(list(self.module.RAW.glob('response-*.json')),[])
 
 if __name__=='__main__':unittest.main()

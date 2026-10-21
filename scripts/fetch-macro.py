@@ -84,8 +84,12 @@ def main():
     ]
     fred_specs += [('us_cpi','US CPI all urban consumers','index 1982-84=100','CPIAUCSL'),
                    ('us_industrial','US industrial production','index 2017=100','INDPRO')]
+    fred_circuit=False
     for key, label, unit, provider_id in fred_specs:
         fred_url = f'https://fred.stlouisfed.org/graph/fredgraph.csv?id={provider_id}&cosd=2025-01-01'
+        if fred_circuit:
+            failures.append({'provider':'FRED','seriesId':key,'error':'Provider circuit open after access / transport failure; prior snapshot retained'})
+            continue
         try:
             body, checksum, modified,collected = fetch(fred_url, '.csv')
             table = list(csv.DictReader(io.StringIO(body.decode('utf-8-sig'))))
@@ -95,6 +99,7 @@ def main():
             register(key, label, unit, 'monthly' if key in ('us_cpi','us_industrial') else 'daily', 'FRED / original official agency', f'https://fred.stlouisfed.org/series/{provider_id}', 'Public CSV export. US broad dollar index is not DXY. Release/vintage timestamps remain unknown; monthly FRED labels denote the month, not release date.', [(row[date_key], finite(row[provider_id])) for row in table], checksum, modified,collected)
         except Exception as error:
             failures.append({'provider': 'FRED', 'seriesId': key, 'error': str(error)})
+            if isinstance(error,(URLError,TimeoutError)) or 'HTML response' in str(error):fred_circuit=True
 
     try:
         import pandas as pd
