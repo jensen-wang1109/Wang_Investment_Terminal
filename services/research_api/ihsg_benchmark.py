@@ -44,5 +44,9 @@ def sync_benchmark(cloud=None,force=False):
     for offset in range(0,len(rows),250):cloud.request('market_benchmark_prices_daily?on_conflict=owner_id,symbol,trade_date',rows[offset:offset+250],prefer='resolution=merge-duplicates,return=minimal')
     checked={r['trade_date']:r for r in benchmark_history(cloud)}
     if any(r['trade_date'] not in checked or any(checked[r['trade_date']][k]!=r[k] for k in ('open','high','low','close','volume')) for r in rows):raise CloudUnavailable('IHSG write readback mismatch')
+    old={r['trade_date']:r for r in previous}
+    inserted=sum(r['trade_date'] not in old for r in rows)
+    updated=sum(r['trade_date'] in old and any(old[r['trade_date']][k]!=r[k] for k in ('open','high','low','close','volume')) for r in rows)
     return {'verified':True,'rows':len(checked),'received':len(rows),'last':max(checked),'rejected':rejected,
+        'inserted':inserted,'updated':updated,'unchanged':len(rows)-inserted-updated,
         'missing_sessions':[d for d in session_dates(start,expected) if d not in checked]}

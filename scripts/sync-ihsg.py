@@ -14,5 +14,5 @@ if __name__=='__main__':
         status='failed';result={'error_type':type(error).__name__};print(json.dumps({'status':status,**result}),flush=True)
     cloud.request('ingestion_runs',[{'owner_id':cloud.owner,'run_id':str(uuid.uuid4()),'series_id':'market.ihsg',
         'started_at':started,'finished_at':datetime.now(timezone.utc).isoformat(),'status':status,
-        'inserted_rows':result.get('received',0),'duplicate_rows':0,'error_code':json.dumps(result) if status!='success' else None}])
+        'inserted_rows':result.get('inserted',0),'duplicate_rows':result.get('unchanged',0),'error_code':json.dumps(result) if status!='success' else None}])
     if status=='failed':raise SystemExit(2)

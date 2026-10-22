@@ -10,6 +10,14 @@ def news(title,id,provider='ANTARA',age=1):
     return {'id':id,'title':title,'url':host+id,'provider':provider,'published_at':(NOW-timedelta(hours=age)).isoformat(),'first_seen_at':(NOW-timedelta(minutes=1)).isoformat(),'topic':'Bisnis & Market','quality_flag':'rss_headline_only'}
 
 class SectorTrendTests(unittest.TestCase):
+    def test_macro_ui_snapshot_does_not_duplicate_raw_observation_vintages(self):
+        class Cloud:
+            owner='fixture'
+            def request(self,path):return [{'generated_at':NOW.isoformat(),'payload':{'items':[],
+                'intelligence_dataset':{'observations':[{'value':1}]*10000},'scope':'Fixture'}}]
+        snapshot=macro_snapshot(Cloud(),NOW)
+        self.assertNotIn('intelligence_dataset',snapshot);self.assertEqual(snapshot['items'],[])
+
     def test_macro_freshness_preserves_quarterly_publication_lag(self):
         class Cloud:
             owner='unit'

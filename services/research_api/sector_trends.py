@@ -134,7 +134,8 @@ def save_macro_context(cloud):
 def macro_snapshot(cloud,now):
     rows=read(cloud,'sector_macro_context?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'payload,generated_at','order':'generated_at.desc','limit':1}))
     if not rows:return {'items':[],'status':'unavailable','scope':'Angka makro resmi belum tersimpan. Berita tidak menggantikan data numerik.'}
-    result=rows[0]['payload']
+    # Raw vintages live once in sector_macro_context, not every monitor run.
+    result={k:v for k,v in rows[0]['payload'].items() if k!='intelligence_dataset'}
     for item in result['items']:
         age=(now.date()-datetime.fromisoformat(item['date']).date()).days
         limit={'annual':800,'quarterly':150,'monthly':70,'policy-event':180}.get(item['frequency'],7)
@@ -201,9 +202,10 @@ def run_monitor(cloud=None,refresh_news=True,force_train=False):
 def sector_snapshot(cloud=None):
     cloud=cloud or SupabaseStore();filters={'owner_id':'eq.'+cloud.owner}
     states=read(cloud,'sector_opportunity_state?'+urlencode({**filters,'select':'theme_id,revision,updated_at,payload','order':'updated_at.desc','limit':20}))
-    runs=read(cloud,'sector_monitor_runs?'+urlencode({**filters,'select':'generated_at,status,payload','order':'generated_at.desc','limit':20}))
+    runs=read(cloud,'sector_monitor_runs?'+urlencode({**filters,'select':'generated_at,status','order':'generated_at.desc','limit':1}))
     success=read(cloud,'sector_monitor_runs?'+urlencode({**filters,'status':'in.(success,partial)','select':'generated_at,status,payload','order':'generated_at.desc','limit':1}))
     latest=success[0] if success else None
+    if latest:latest['payload'].get('macro',{}).pop('intelligence_dataset',None)
     model=latest_model(cloud,latest['payload'].get('model_id') if latest else None)
     if model:model={k:v for k,v in model.items() if k!='current_predictions'};model['models']=[{k:v for k,v in m.items() if k!='parameters'} for m in model['models']]
     from .sector_intelligence import intelligence_snapshot
