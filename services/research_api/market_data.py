@@ -46,7 +46,13 @@ def normalize_history(item,frame,meta,now):
         vol=finite(row.get('Volume'));adj=finite(row.get('Adj Close'))
         if any(v is None for v in values.values()):rejected+=1;continue
         o,h,l,c=(values[k] for k in ('open','high','low','close'))
-        if c<=0 or h<max(o,l,c) or l>min(o,h,c) or (vol is not None and (vol<0 or vol%1)):
+        if item['kind']=='CURRENCY' and c>0:
+            # FX is a daily exchange-rate series, not exchange-traded volume.
+            # Bad OHLC fields do not invalidate a positive source closing rate;
+            # explicitly omit those fields rather than repair their values.
+            if h<max(o,l,c) or l>min(o,h,c):o=h=l=None
+            vol=None
+        elif c<=0 or h<max(o,l,c) or l>min(o,h,c) or (vol is not None and (vol<0 or vol%1)):
             rejected+=1;continue
         point={'observation_date':day,'value':c,'open':o,'high':h,'low':l,'adjusted_close':adj,
                'volume':int(vol) if vol is not None else None,'published_at':None,'available_at':now.isoformat(),
@@ -57,12 +63,46 @@ def normalize_history(item,frame,meta,now):
     return result,rejected
 
 def series_record(item):
-    return {'id':item['id'],'name':item['label'],'provider':'Yahoo Finance','provider_series_id':item['symbol'],
+    return {'id':item['id'],'name':item['label']+(' (calculated cross)' if item.get('cross') else ''),'provider':'Yahoo Finance','provider_series_id':' / '.join(p[0] for p in item['cross']) if item.get('cross') else item['symbol'],
             'category':'commodity' if item['category']=='commodity' else 'market','geography':'global',
             'currency':item['currency'],'unit':item['unit'],'frequency':'business_daily',
             'measurement_kind':'price' if item['kind']!='INDEX' else 'index_level',
-            'source_url':'https://finance.yahoo.com/quote/'+quote(item['symbol'],safe='')+'/history/',
+            'source_url':'https://finance.yahoo.com/quote/'+quote(item['cross'][0][0] if item.get('cross') else item['symbol'],safe='')+'/history/',
             'storage_permission':'user_attested_import','training_permission':'unverified'}
+
+def fx_snapshot(cloud):
+    rates=[]
+    for item in catalogue():
+        if item['category']!='currency':continue
+        rows=cloud.request('current_economic_observations?'+urlencode({'owner_id':'eq.'+cloud.owner,'series_id':'eq.'+item['id'],
+            'quality_flag':'in.(identity_verified:'+item['symbol']+',derived_cross:'+item['symbol']+')','select':'observation_date,value,retrieved_at','order':'observation_date.desc','limit':2}))
+        current=rows[0] if rows else None;previous=rows[1] if len(rows)>1 else None
+        value=finite(current['value']) if current else None;base=finite(previous['value']) if previous else None
+        rates.append({'symbol':item['symbol'],'label':item['label'],'base':item['base'],'quote':'IDR','value':value,
+            'date':current['observation_date'] if current else None,'retrieved_at':current['retrieved_at'] if current else None,
+            'change_percent':100*(value/base-1) if value is not None and base else None,'unit':item['unit'],'basis':item.get('basis')})
+    return {'rates':rates,'storage':'Supabase','frequency':'daily_completed_sessions'}
+
+def cross_history(item,yf,start,end,now):
+    """CNY/IDR = USD/IDR divided by USD/CNY on matching completed dates.
+    Direct CNY/IDR has no usable historical coverage. This is explicitly a
+    calculated cross, with no forward-fill or manufactured OHLC/volume.
+    """
+    histories=[]
+    for symbol,currency in item['cross']:
+        ticker=yf.Ticker(symbol);frame=retry_transient(lambda:ticker.history(start=start,end=end,auto_adjust=False,actions=False))
+        spec={'symbol':symbol,'kind':'CURRENCY','currency':currency}
+        points,_=normalize_history(spec,frame,ticker.history_metadata,now)
+        histories.append({p['observation_date']:p for p in points})
+    result=[]
+    for day in sorted(set(histories[0])&set(histories[1])):
+        numerator=histories[0][day]['value'];denominator=histories[1][day]['value']
+        if denominator<=0:continue
+        point={'observation_date':day,'value':numerator/denominator,'open':None,'high':None,'low':None,'adjusted_close':None,
+            'volume':None,'published_at':None,'available_at':now.isoformat(),'retrieved_at':now.isoformat(),'quality_flag':'derived_cross:'+item['symbol']}
+        point['revision_hash']=checksum({k:v for k,v in point.items() if k not in ('retrieved_at','available_at')});result.append(point)
+    if not result:raise ValueError('No matching completed FX dates for calculated cross')
+    return result,0
 
 def sync_market_history(cloud=None,symbols=None,force=False):
     import yfinance as yf
@@ -75,11 +115,14 @@ def sync_market_history(cloud=None,symbols=None,force=False):
             # Yesterday's row is not proof that today's newly completed session
             # has been collected. Always refresh a small overlap, including
             # source revisions; the database revision hash deduplicates it.
-            start=(datetime.fromisoformat(last).date()-timedelta(days=8)).isoformat() if last else (now.date()-timedelta(days=365*5+10)).isoformat()
-            ticker=yf.Ticker(item['symbol'])
-            frame=retry_transient(lambda:ticker.history(start=start,end=(now.date()+timedelta(days=1)).isoformat(),auto_adjust=False,actions=False))
-            if frame is None or frame.empty:raise ValueError('Source returned no history')
-            points,rejected=normalize_history(item,frame,ticker.history_metadata,now)
+            start=(datetime.fromisoformat(last).date()-timedelta(days=8)).isoformat() if last and not force else (now.date()-timedelta(days=365*5+10)).isoformat()
+            end=(now.date()+timedelta(days=1)).isoformat()
+            if item.get('cross'):points,rejected=cross_history(item,yf,start,end,now)
+            else:
+                ticker=yf.Ticker(item['symbol'])
+                frame=retry_transient(lambda:ticker.history(start=start,end=end,auto_adjust=False,actions=False))
+                if frame is None or frame.empty:raise ValueError('Source returned no history')
+                points,rejected=normalize_history(item,frame,ticker.history_metadata,now)
             for offset in range(0,len(points),500):cloud.ingest(series_record(item),points[offset:offset+500],str(uuid.uuid4()))
             stored={p['observation_date']:p for p in cloud.history(item['id'])}
             if any(p['observation_date'] not in stored or any(finite(stored[p['observation_date']].get(k))!=p.get(k) for k in ('value','open','high','low','volume','adjusted_close')) for p in points):
@@ -108,7 +151,9 @@ def market_history(cloud,symbol):
         return {'instrument':{'id':symbol,'label':symbol,'symbol':symbol,'unit':'IDR/share','kind':'EQUITY','source_url':'https://finance.yahoo.com/quote/'+symbol+'/history/'},'rows':points,'identity_verified':bool(points),'storage':'Supabase','status':'available' if points else 'unavailable'}
     item=instrument(symbol);rows=cloud.history(item['id']);valid=[]
     for row in rows:
-        if row['quality_flag']!='identity_verified:'+symbol:continue
+        allowed={'identity_verified:'+symbol}
+        if item.get('cross'):allowed.add('derived_cross:'+symbol)
+        if row['quality_flag'] not in allowed:continue
         p={k:finite(row.get(k)) for k in ('value','open','high','low','adjusted_close','volume')}
         if p['value'] is None:continue
         valid.append({**p,'date':row['observation_date'],'retrieved_at':row['retrieved_at']})

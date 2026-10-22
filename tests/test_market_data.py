@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import Mock,patch
 from datetime import datetime,timezone
 import pandas as pd
-from services.research_api.market_data import normalize_history,instrument,last_completed_day,normalize_commodity,sync_market_history
+from services.research_api.market_data import normalize_history,instrument,last_completed_day,normalize_commodity,sync_market_history,cross_history
 NOW=datetime(2026,10,22,8,tzinfo=timezone.utc)
 class MarketDataTests(unittest.TestCase):
  def metadata(self):return {'symbol':'^GSPC','instrumentType':'INDEX','currency':'USD','exchangeTimezoneName':'America/New_York','currentTradingPeriod':{'regular':{'end':pd.Timestamp('2026-10-22T16:00:00-04:00')}}}
@@ -45,4 +45,18 @@ class MarketDataTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as directory,patch('yfinance.Ticker',return_value=ticker),patch('services.research_api.market_data.CACHE',Path(directory)),patch('services.research_api.market_data.time.sleep'):
    result=sync_market_history(cloud,['^GSPC'])
   ticker.history.assert_called_once();self.assertTrue(result['results'][0]['database_verified'])
+ def test_fx_retains_verified_closing_rate_without_fabricating_bad_ohlc(self):
+  frame=self.frame();frame['High']=101.
+  spec={'symbol':'IDR=X','kind':'CURRENCY','currency':'IDR'};meta={**self.metadata(),'symbol':'IDR=X','instrumentType':'CURRENCY','currency':'IDR'}
+  rows,rejected=normalize_history(spec,frame,meta,NOW)
+  self.assertEqual(rows[0]['value'],104);self.assertIsNone(rows[0]['high']);self.assertIsNone(rows[0]['volume']);self.assertEqual(rejected,0)
+ def test_cross_uses_only_matching_verified_completed_dates_and_correct_direction(self):
+  import pandas as pd
+  def ticker(symbol):
+   close=18000 if symbol=='IDR=X' else 7.2
+   frame=pd.DataFrame([{'Open':close,'High':close,'Low':close,'Close':close,'Volume':0}],index=pd.to_datetime(['2026-10-21']))
+   t=Mock();t.history.return_value=frame;t.history_metadata={**self.metadata(),'symbol':symbol,'currency':'IDR' if symbol=='IDR=X' else 'CNY','instrumentType':'CURRENCY'};return t
+  yf=Mock();yf.Ticker.side_effect=ticker
+  rows,_=cross_history(instrument('CNYIDR=X'),yf,'2026-10-20','2026-10-23',NOW)
+  self.assertEqual(rows[0]['value'],2500);self.assertEqual(rows[0]['quality_flag'],'derived_cross:CNYIDR=X');self.assertIsNone(rows[0]['open'])
 if __name__=='__main__':unittest.main()

@@ -398,5 +398,82 @@
     "timezone": "America/New_York",
     "category": "commodity",
     "ninjas": "aluminum"
+  },
+  {
+    "id": "fx_usd_idr",
+    "label": "USD/IDR",
+    "symbol": "IDR=X",
+    "kind": "CURRENCY",
+    "currency": "IDR",
+    "unit": "IDR / USD",
+    "timezone": "Europe/London",
+    "category": "currency",
+    "base": "USD"
+  },
+  {
+    "id": "fx_aud_idr",
+    "label": "AUD/IDR",
+    "symbol": "AUDIDR=X",
+    "kind": "CURRENCY",
+    "currency": "IDR",
+    "unit": "IDR / AUD",
+    "timezone": "Europe/London",
+    "category": "currency",
+    "base": "AUD"
+  },
+  {
+    "id": "fx_sgd_idr",
+    "label": "SGD/IDR",
+    "symbol": "SGDIDR=X",
+    "kind": "CURRENCY",
+    "currency": "IDR",
+    "unit": "IDR / SGD",
+    "timezone": "Europe/London",
+    "category": "currency",
+    "base": "SGD"
+  },
+  {
+    "id": "fx_myr_idr",
+    "label": "MYR/IDR",
+    "symbol": "MYRIDR=X",
+    "kind": "CURRENCY",
+    "currency": "IDR",
+    "unit": "IDR / MYR",
+    "timezone": "Europe/London",
+    "category": "currency",
+    "base": "MYR"
+  },
+  {
+    "id": "fx_eur_idr",
+    "label": "EUR/IDR",
+    "symbol": "EURIDR=X",
+    "kind": "CURRENCY",
+    "currency": "IDR",
+    "unit": "IDR / EUR",
+    "timezone": "Europe/London",
+    "category": "currency",
+    "base": "EUR"
+  },
+  {
+    "id": "fx_cny_idr",
+    "label": "CNY/IDR",
+    "symbol": "CNYIDR=X",
+    "kind": "CURRENCY",
+    "currency": "IDR",
+    "unit": "IDR / CNY",
+    "timezone": "Europe/London",
+    "category": "currency",
+    "base": "CNY",
+    "cross": [
+      [
+        "IDR=X",
+        "IDR"
+      ],
+      [
+        "CNY=X",
+        "CNY"
+      ]
+    ],
+    "basis": "Kurs silang: USD/IDR \u00f7 USD/CNY; tanggal sama, tanpa forward-fill."
   }
 ]

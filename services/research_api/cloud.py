@@ -140,13 +140,17 @@ class SupabaseStore:
         companies=self.request('companies?'+urlencode({'owner_id':'eq.'+self.owner,'select':'id,symbol,name,active,company_watchlist_members(active)','order':'symbol','limit':1000}))
         profiles=self.request('current_stock_company_snapshots?'+urlencode({'owner_id':'eq.'+self.owner,'select':'symbol,retrieved_at,profile,metrics','limit':1000}))
         by_symbol={p['symbol']:p for p in profiles}
+        mappings=self.request('company_research_profiles?'+urlencode({'owner_id':'eq.'+self.owner,'select':'company_id,sector_id,industry_label,template_id','limit':1000}))
+        by_company={p['company_id']:p for p in mappings}
+        from .stock_classification import read_overlay
+        overrides=read_overlay(self)['mappings']
         rows=[]
         for c in companies:
             p=by_symbol.get(c['symbol'],{})
             rows.append({'symbol':c['symbol'],'name':p.get('profile',{}).get('longName') or c['name'],
                 'is_active':c['active'] and any(m['active'] for m in c['company_watchlist_members']),
                 'retrieved_at':p.get('retrieved_at'),'modules':p.get('profile',{}).get('moduleStatus',{}),
-                'metric_count':sum(v is not None for v in p.get('metrics',{}).values())})
+                'metric_count':sum(v is not None for v in p.get('metrics',{}).values()),'classification':overrides.get(c['symbol'],by_company.get(c['id']))})
         return {'stocks':rows,'active_limit':200}
 
     def set_stock_active(self,symbol,enabled,name=None):
@@ -235,8 +239,10 @@ class SupabaseStore:
         for sector in sectors:
             industries=sorted((i for i in branches.values() if i['sector_id']==sector['id']),key=lambda i:i['name'].casefold())
             tree.append({**sector,'industries':industries,'stock_count':sum(len(i['stocks']) for i in industries)})
-        return {'sectors':tree,'unmapped':[{'symbol':c['symbol'],'name':c['name']} for c in companies if c['id'] not in assigned],
+        result={'sectors':tree,'unmapped':[{'symbol':c['symbol'],'name':c['name']} for c in companies if c['id'] not in assigned],
             'stock_count':len(companies),'industry_count':len(branches),'retrieved_at':now_iso(),'source':'Supabase · klasifikasi riset pribadi','training_ready':False}
+        from .stock_classification import apply_overlay
+        return apply_overlay(self,result)
 
     def storage(self):
         return self.request('rpc/infrastructure_storage',{})
