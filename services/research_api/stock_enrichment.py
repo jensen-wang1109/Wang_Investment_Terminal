@@ -25,10 +25,8 @@ class ResearchAccessDenied(Exception):
         super().__init__('Yahoo source access rejected')
         self.status_code=status
 
-def access_status(error):
-    status=getattr(error,'status_code',getattr(error,'code',None))
-    status=status or getattr(getattr(error,'response',None),'status_code',None)
-    return 429 if error.__class__.__name__=='YFRateLimitError' else status
+from .providers import access_status
+
 
 def safe_url(value):
     if not isinstance(value,str):return None

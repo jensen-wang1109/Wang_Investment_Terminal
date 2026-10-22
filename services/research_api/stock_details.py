@@ -58,7 +58,7 @@ def collect_details(ticker,sleep=time.sleep):
         from .yahoo_valuation import apply_price_book
         apply_price_book(result,ticker.valuation,stamp)
     except Exception as error:
-        from .stock_enrichment import access_status
+        from .providers import access_status
         if access_status(error) in (401,403,429):raise
         result['metrics']['priceToBook']=None
     statements=[]

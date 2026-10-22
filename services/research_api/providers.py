@@ -41,6 +41,12 @@ def finite(value):
         return None
 
 
+def access_status(error):
+    status=getattr(error,'status_code',getattr(error,'code',None))
+    status=status or getattr(getattr(error,'response',None),'status_code',None)
+    return 429 if error.__class__.__name__=='YFRateLimitError' else status
+
+
 class YahooProvider:
     name = 'yahoo'
     def __init__(self, rights_path=None, loader=importlib.import_module):

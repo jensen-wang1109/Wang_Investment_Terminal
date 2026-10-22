@@ -8,7 +8,7 @@ from services.research_api.environment import load_server_environment
 from services.research_api.cloud import SupabaseStore
 from services.research_api.providers import retry_transient
 from services.research_api.stock_details import normalize_statement
-from services.research_api.stock_enrichment import access_status
+from services.research_api.providers import access_status
 from services.research_api.yahoo_valuation import apply_price_book
 
 def audit(symbols=None,financials=False,sleep=time.sleep):
