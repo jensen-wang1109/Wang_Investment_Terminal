@@ -1,11 +1,22 @@
 {
-  "weights": {"macro":20,"supply_demand":20,"earnings":25,"catalyst":10,"valuation":15,"market":10},
-  "high":80,
-  "developing":65,
-  "watch":50,
-  "minimum_data_quality":80,
-  "score_change":10,
-  "cooldown_hours":72,
-  "max_industries":3,
-  "minimum_turnover_idr":1000000000
+  "weights": {
+    "macro": 25,
+    "leading": 20,
+    "relative": 20,
+    "momentum": 15,
+    "breadth": 10,
+    "risk": 10
+  },
+  "high": 80,
+  "developing": 65,
+  "watch": 50,
+  "minimum_data_quality": 70,
+  "minimum_metric_weight": 65,
+  "score_change": 10,
+  "cooldown_hours": 72,
+  "max_industries": 3,
+  "minimum_turnover_idr": 1000000000,
+  "overextended_ma50": 0.2,
+  "overextended_return21": 0.3,
+  "overextended_return63": 0.6
 }

@@ -24,6 +24,7 @@ class FakeCloud:
             raise AssertionError(path)
         if q.get('owner_id')!=['eq.'+self.owner]:raise AssertionError('Missing owner filter')
         if table=='news_items':return copy.deepcopy(self.articles)
+        if table=='market_benchmark_prices_daily':return []
         if table=='ingestion_runs':return self.logs[-1:]
         if table=='daily_market_analysis':
             rows=list(self.rows.values())
@@ -33,6 +34,15 @@ class FakeCloud:
         raise AssertionError(path)
 
 class NewsAnalyzerTests(unittest.TestCase):
+    def test_eight_am_publication_cutoff_and_late_collection_are_distinct(self):
+        cutoff=datetime(2026,10,20,1,tzinfo=timezone.utc)
+        early=article('IHSG menguat','early',published='2026-10-20T00:59:00Z');early['first_seen_at']='2026-10-20T01:02:00Z'
+        late=article('Rupiah melemah','late',published='2026-10-20T01:01:00Z');late['first_seen_at']='2026-10-20T01:02:00Z'
+        report=build_report([early,late],cutoff,datetime(2026,10,20,1,3,tzinfo=timezone.utc))
+        self.assertEqual(report['article_count'],1);self.assertEqual(len(report['ihsg']['evidence']),1)
+        self.assertNotEqual(report['publication_cutoff'],report['knowledge_cutoff'])
+        self.assertIn('IHSG',build_report([],cutoff)['conclusion'])
+
     def test_no_news_is_insufficient_not_neutral(self):
         r=build_report([],CUTOFF);self.assertIsNone(r['score']);self.assertEqual(r['label'],'BUKTI TERBATAS');self.assertEqual(r['article_count'],0)
 

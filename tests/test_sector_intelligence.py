@@ -11,7 +11,11 @@ MAPPING={'MEDC.JK':{'sector':'IDXENERGY','industry':'Oil & Gas'},
  'ITMG.JK':{'sector':'IDXENERGY','industry':'Coal'},
  'SIMP.JK':{'sector':'IDXNONCYC','industry':'Palm Oil'},
  'ARCI.JK':{'sector':'IDXBASIC','industry':'Gold'},
- 'TINS.JK':{'sector':'IDXBASIC','industry':'Tin'}}
+ 'TINS.JK':{'sector':'IDXBASIC','industry':'Tin'},
+ 'PGAS.JK':{'sector':'IDXENERGY','industry':'Oil & Gas'},
+ 'BSSR.JK':{'sector':'IDXENERGY','industry':'Coal'},
+ 'LSIP.JK':{'sector':'IDXNONCYC','industry':'Palm Oil'},
+ 'ANTM.JK':{'sector':'IDXBASIC','industry':'Gold'}}
 
 def dataset(keys=('brent','gold','cpo')):
     return {'series':[{'id':k,'label':k,'unit':'USD / unit','frequency':'daily','source':'Official test fixture','sourceUrl':'https://www.worldbank.org/'} for k in keys],
@@ -19,13 +23,17 @@ def dataset(keys=('brent','gold','cpo')):
             'retrievedAt':NOW.isoformat(),'publishedAt':None} for k in keys for i in range(71)]}
 
 def prices():
-    return [{'ticker':ticker,'trade_date':(NOW-timedelta(days=90-i)).date().isoformat(),
-        'close':1000+i*10,'adjusted_close':1000+i*10,'volume':10_000_000} for ticker in MAPPING for i in range(91)]
+    return [{'ticker':ticker,'trade_date':(NOW-timedelta(days=399-i)).date().isoformat(),
+        'close':1000*1.0015**i,'adjusted_close':1000*1.0015**i,'volume':10_000_000} for ticker in MAPPING for i in range(400)]
+
+def benchmark():
+    return [{'trade_date':(NOW-timedelta(days=399-i)).date().isoformat(),'close':7000*1.0001**i} for i in range(400)]
+
 
 def profiles():
     return {ticker:{'retrieved_at':NOW.isoformat(),'profile':{'longBusinessSummary':'oil gas coal mining gold plantation palm'},'metrics':{'trailingPE':10}} for ticker in MAPPING}
 
-def assertion(event,industry,factor='earnings',ticker='MEDC.JK',score=95,**kw):
+def assertion(event,industry,factor='macro',ticker='MEDC.JK',score=95,**kw):
     return {'id':event+industry+factor,'event_id':event,'industry':industry,'factor':factor,'ticker':ticker,
         'score':score,'material_exposure':True,'verification':'reviewed','credibility':'issuer_filing',
         'source_url':'https://www.idx.co.id/test-fixture','published_at':(NOW-timedelta(days=1)).isoformat(),
@@ -47,16 +55,16 @@ def news(title,identifier='n'):
 
 class IntelligenceTests(unittest.TestCase):
     def evaluate(self,**kw):
-        args=dict(dataset=dataset(),news=[],mapping=MAPPING,profiles=profiles(),prices=prices(),assertions=[],previous={},now=NOW)
+        args=dict(dataset=dataset(),news=[],mapping=MAPPING,profiles=profiles(),prices=prices(),assertions=[],previous={},now=NOW,benchmark=benchmark())
         args.update(kw);return evaluate(**args)
 
-    def test_missing_earnings_valuation_exposure_never_populates_shortlist(self):
+    def test_missing_macro_never_populates_shortlist_and_no_fundamental_factors(self):
         r=self.evaluate(news=[news('Harga minyak naik')]);self.assertEqual(r['top_industries'],[])
         self.assertEqual(r['empty_message'],'No New High-Conviction Sectoral Opportunity.')
         energy=next(s for s in r['sessions'] if s['id']=='v2_energy')
         for i in energy['industries']:
-            self.assertIsNone(i['factors']['earnings']['value']);self.assertIsNone(i['factors']['valuation']['value'])
-            self.assertLessEqual(i['score'],30);self.assertFalse(i['eligible'])
+            self.assertEqual(set(i['factors']),set(DEFAULTS['weights']))
+            self.assertIsNone(i['factors']['macro']['value']);self.assertFalse(i['eligible'])
         self.assertIsNone(publication_decision(energy,None,NOW,config()))
 
     def test_credible_energy_shock_evaluates_both_sides_and_gates_publication(self):
@@ -110,9 +118,9 @@ class IntelligenceTests(unittest.TestCase):
         self.assertIn('not_validated',r['layer_status']['historical_macro_model'])
         self.assertIn('not_configured',r['layer_status']['llm'])
 
-    def test_business_summary_required_even_with_high_scores(self):
+    def test_company_fundamentals_do_not_affect_scores_or_eligibility(self):
         r=self.evaluate(assertions=assertions(),profiles={})
-        self.assertEqual(r['top_industries'],[])
+        self.assertEqual(r['top_industries'],self.evaluate(assertions=assertions())['top_industries'])
 
     def test_ordinary_upgrades_obey_cooldown(self):
         s=next(s for s in self.evaluate(assertions=assertions())['sessions'] if s['id']=='v2_energy')
@@ -146,7 +154,7 @@ class IntelligenceTests(unittest.TestCase):
         self.assertEqual(len(reader.pages),2)
         text=' '.join(p.extract_text() for p in reader.pages)
         self.assertIn('REVISION 7',text);self.assertIn('Energy supply shock',text)
-        self.assertIn('not success probabilities',text)
+        self.assertIn('not success probabilities',' '.join(text.split()))
         self.assertTrue(any(p.get('/Annots') for p in reader.pages))
         self.assertFalse(any(list(p.images) for p in reader.pages))
 

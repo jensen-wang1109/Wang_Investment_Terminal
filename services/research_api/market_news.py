@@ -8,7 +8,7 @@ from .providers import retry_transient
 from .repository import now_iso
 
 SPECS=FEEDS+GOOGLE_FEEDS
-SCHEDULE={'time':'07:00','close_time':'17:15','timezone':'Asia/Jakarta','days':'Pagi setiap hari; sore pada hari bursa IDX',
+SCHEDULE={'time':'08:00','close_time':'17:15','timezone':'Asia/Jakarta','days':'Pagi setiap hari; sore pada hari bursa IDX',
     'workflow_url':'https://github.com/jensen-wang1109/Wang_Investment_Terminal/actions/workflows/market-news.yml'}
 
 def read(cloud,path):return retry_transient(lambda:cloud.request(path))
@@ -22,7 +22,8 @@ def news_snapshot(cloud=None):
         if not approved_article(row):continue
         key=(row['provider'],row['title'].casefold())
         if key in seen:continue
-        articles.append(row);seen.add(key)
+        from .news_impacts import impacts
+        articles.append({**row,'industry_impacts':impacts(row['title'])});seen.add(key)
     sources=[]
     for spec in SPECS:
         entries=[r for r in logs if r['series_id']=='news.feed.'+spec['id']]

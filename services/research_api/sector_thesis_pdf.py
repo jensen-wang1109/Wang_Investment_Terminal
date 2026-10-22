@@ -75,7 +75,7 @@ def render_sector_thesis(record):
     else:y=paragraph('Chart omitted: sufficient quantitative observations / page space unavailable. No simulated series used.',left,y,size=7.5,color=muted,max_height=24)-12
     y=label('04 / Industry shortlist & execution gates',y)
     for i in sorted(thesis['industries'],key=lambda x:-x['score'])[:3]:
-        y=paragraph(f"{i['industry']} | {i['score']:g}/100 | data quality {i['data_quality']:g}/100 | {'eligible' if i['eligible'] else 'research hypothesis'}",left,y,size=8.3,strong=True,max_height=27)-3
+        y=paragraph(f"{i['industry']} | {i['score']:g}/100 | coverage confidence {i['data_quality']:g}/100 | {'eligible' if i['eligible'] else 'research hypothesis'}",left,y,size=8.3,strong=True,max_height=27)-3
         y=paragraph(i['earnings_effect'],left,y,size=8,max_height=27)-8
     if not thesis['industries']:paragraph('No verified beneficiary industry is shortlisted.',left,y,size=8,max_height=25)
     c.showPage();frame(2);y=h-72
@@ -100,5 +100,11 @@ def render_sector_thesis(record):
         c.linkURL(url,(left,before-24,w-left,before),relative=0,thickness=0)
         paragraph('LINK',w-left-29,before,width=29,size=7,color=teal,max_height=12)
     y-=10;y=label('09 / Method and limits',y)
-    paragraph('Provisional weights: macro 20%, supply/demand 20%, earnings 25%, catalyst 10%, valuation 15%, market 10%. Missing factors are not imputed or reweighted. Scores are thesis strength, not success probabilities. Profile product matches do not prove material revenue. Publication requires evidence gates. Price-only ML has not passed validation; macro/issuer point-in-time backtest is incomplete. Full source metadata and selected revision are retained in the application.',left,y,size=7.7,color=muted,max_height=83)
+    methodology=thesis.get('methodology')
+    if methodology:
+        weights=', '.join(f'{k} {v:g}%' for k,v in methodology['weights'].items())
+        method='Macro-driven research weights: '+weights+'. Missing metrics excluded; available weights normalized. Data Coverage Confidence is separate (count/history/diversification); one stock cannot confirm an industry. Benchmark: actual IHSG. Extended rallies excluded from shortlist. Company fundamentals are not scoring inputs. Scores are research strength, not success probabilities. Combined macro model has not passed point-in-time validation. Selected revision and full evidence remain in the application.'
+    else:
+        method='Archived methodology: macro 20%, supply/demand 20%, earnings 25%, catalyst 10%, valuation 15%, market 10%. Missing factors were not reweighted. Scores are thesis strength, not success probabilities. Full source metadata and selected revision are retained in the application.'
+    paragraph(method,left,y,size=7.7,color=muted,max_height=83)
     c.save();return out.getvalue()

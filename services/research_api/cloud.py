@@ -197,7 +197,14 @@ class SupabaseStore:
     def stock_details(self,symbol):
         filters={'owner_id':'eq.'+self.owner,'symbol':'eq.'+symbol,'select':'*','limit':1000}
         profile=self.request('current_stock_company_snapshots?'+urlencode({**filters,'limit':1}))
+        from .yahoo_valuation import protect_unverified_pbv
+        if profile:protect_unverified_pbv(profile[0])
         statements=self.request('current_stock_statement_snapshots?'+urlencode({**filters,'order':'period_end.desc,statement_kind,frequency'}))
+        from datetime import date
+        today=date.today()
+        try:cutoff=today.replace(year=today.year-5).isoformat()
+        except ValueError:cutoff=today.replace(year=today.year-5,day=28).isoformat()
+        statements=[s for s in statements if cutoff<=s['period_end']<=today.isoformat()]
         actions=self.request('current_stock_action_snapshots?'+urlencode({**filters,'order':'event_date.desc'}))
         return {'status':'available' if profile else 'not_synced','company':profile[0] if profile else None,'statements':statements,'actions':actions,'source':'Yahoo Finance','point_in_time_ready':False}
 

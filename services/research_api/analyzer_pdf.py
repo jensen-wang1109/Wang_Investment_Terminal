@@ -49,7 +49,7 @@ def render_brief(report):
         canvas.drawString(48,26,'Riset pribadi | Ringkasan judul berita | Bukan instruksi transaksi')
         canvas.drawRightString(width-48,26,f'{report["report_date"]}  /  {doc.page}')
         canvas.restoreState()
-    story=[p('DAILY BRIEF  /  '+report['report_date'],label),p('Market Thesis',title),
+    story=[p('DAILY BRIEF  /  '+report['report_date'],label),p('Macro Analyzer · Market Thesis',title),
         p('Konteks pasar, katalis dan risiko dalam satu ringkasan.',body),
         p('Jenis laporan: '+{'morning':'Pagi','close':'Setelah penutupan IDX','manual':'Pembaruan manual'}.get(report.get('session'),'Arsip laporan'),small),
         p('Jendela berita: '+when(report['window_start'])+' - '+when(report['window_end']),small)]
@@ -59,6 +59,12 @@ def render_brief(report):
     stats.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),HexColor('#eff6f5')),('BOX',(0,0),(-1,-1),.5,line),('VALIGN',(0,0),(-1,-1),'TOP'),('LEFTPADDING',(0,0),(-1,-1),12),('RIGHTPADDING',(0,0),(-1,-1),10),('TOPPADDING',(0,0),(-1,0),12),('BOTTOMPADDING',(0,-1),(-1,-1),10)]))
     story.extend([Spacer(1,12),stats,p('01  /  Executive view',heading),p(report['conclusion']),
         p('Cakupan analisis: '+report['scope_note'],small)])
+    if report.get('ihsg'):
+        ihsg=report['ihsg'];benchmark=ihsg.get('benchmark',{})
+        story.extend([p('IHSG / Indonesia equity context',heading),p(ihsg['summary'])])
+        if benchmark.get('status')=='available':
+            story.append(p(f"IHSG previous close {benchmark['trade_date']}: {benchmark['close']:,.2f}. Previous EOD reference, not an opening-price forecast.",small))
+        story.append(p(report.get('timing_note',''),small))
     for section,items in [('02  /  Faktor pendukung',report['positive']),('03  /  Faktor penekan',report['negative']),('04  /  Dampak sektoral dan sinyal campuran',report['mixed'])]:
         story.append(p(section,heading))
         if not items:story.append(p('Belum ada tema yang memenuhi aturan pada bagian ini.',small))
@@ -71,7 +77,7 @@ def render_brief(report):
     for digest in report.get('digests',[]):
         story.extend([p(digest['topic']+' '+refs(digest['evidence'][:2]),label),p(digest['summary'])])
     story.extend([p('07  /  Metode dan keterbatasan',heading),p(report['method_note'],small),
-        p('Tanggal laporan menggunakan Asia/Jakarta. Judul yang ambigu tidak diberi skor. Berita yang tersedia sesudah waktu analisis tidak dimasukkan. Ini ringkasan otomatis berbasis aturan; isi lengkap artikel belum dianalisis.',small),
+        p('Tanggal laporan menggunakan Asia/Jakarta. Timestamp publikasi sumber dibatasi cutoff laporan; waktu koleksi aktual disimpan terpisah. Ini ringkasan otomatis berbasis aturan; isi lengkap artikel belum dianalisis.',small),
         p('Report ID: '+report['report_id'],small),p('08  /  Referensi berita',heading)])
     for number,row in sources.values():
         metadata=f'{row["provider"]} | {when(row["published_at"])} | '

@@ -24,7 +24,13 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r services/research_api/requirements-sector.txt -r services/research_api/requirements-reporting.txt pypdf==6.21.1 openpyxl==3.1.5
       - name: Verify temporal validation and opportunity deduplication
-        run: python -m unittest tests.test_sector_trends tests.test_sector_intelligence -v
+        run: python -m unittest tests.test_sector_trends tests.test_sector_intelligence tests.test_sector_rotation -v
+      - name: Update actual IHSG benchmark independently of news
+        continue-on-error: true
+        run: python scripts/sync-ihsg.py
+      - name: Diagnose historical technical factors (combined macro model remains unvalidated)
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 0 * * *'
+        run: python scripts/validate-sector-rotation.py
       - name: Refresh official macro sources; preserve cloud context on failure
         timeout-minutes: 4
         if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 0 * * *'

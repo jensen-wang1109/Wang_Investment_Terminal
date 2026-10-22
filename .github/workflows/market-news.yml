@@ -1,7 +1,7 @@
 name: Daily Market News
 on:
   schedule:
-    - cron: '0 0 * * *' # 07:00 Asia/Jakarta every day, including weekends.
+    - cron: '0 1 * * *' # 08:00 Asia/Jakarta every day, including weekends.
     - cron: '15 10 * * 1-5' # 17:15 WIB, after the close; script skips IDX holidays.
   workflow_dispatch:
 permissions:

@@ -1,0 +1,37 @@
+name: Yahoo Research Accuracy
+on:
+  schedule:
+    - cron: '0 11 * * 1-5' # 18:00 WIB: authoritative Current Price/Book.
+    - cron: '0 1 * * 6' # Saturday 08:00 WIB: actual annual/quarterly financials.
+  workflow_dispatch:
+    inputs:
+      financials:
+        description: Also refresh annual and quarterly financial statements
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: yahoo-research-accuracy
+  cancel-in-progress: false
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      WANG_SUPABASE_OWNER_ID: ${{ secrets.WANG_SUPABASE_OWNER_ID }}
+      INCLUDE_FINANCIALS: ${{ inputs.financials }}
+      RESEARCH_SCHEDULE: ${{ github.event.schedule }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r services/research_api/requirements-eod.txt
+      - name: Audit Current PBV and verify Supabase readback
+        run: python -u scripts/audit-yahoo-research.py
+      - name: Refresh financial statements and verify actual periods
+        if: inputs.financials == true || github.event.schedule == '0 1 * * 6'
+        run: python -u scripts/audit-yahoo-research.py --financials

@@ -18,12 +18,14 @@ from .news_analyzer import instant
 from .feeds import approved_article
 from .rights import ROOT
 
-VERSION = 'sector-intelligence-v2.0'
-DEFAULTS = {'weights': {'macro':20,'supply_demand':20,'earnings':25,'catalyst':10,'valuation':15,'market':10},
-    'high':80,'developing':65,'watch':50,'minimum_data_quality':80,'score_change':10,
-    'cooldown_hours':72,'max_industries':3,'minimum_turnover_idr':1_000_000_000}
-FACTOR_LABELS = {'macro':'Macro alignment','supply_demand':'Supply–demand','earnings':'Earnings improvement',
-    'catalyst':'Policy & catalyst','valuation':'Valuation & expectations','market':'Relative strength'}
+from .sector_rotation import WEIGHTS, LABELS, industry_features, combine_factors, macro_factor, leading_factor
+
+VERSION = 'sector-macro-rotation-v3.0'
+DEFAULTS = {'weights': WEIGHTS, 'high':80,'developing':65,'watch':50,
+    'minimum_data_quality':70,'minimum_metric_weight':65,'score_change':10,
+    'cooldown_hours':72,'max_industries':3,'minimum_turnover_idr':1_000_000_000,
+    'overextended_ma50':.20,'overextended_return21':.30,'overextended_return63':.60}
+FACTOR_LABELS = LABELS
 
 def digest(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,ensure_ascii=False,allow_nan=False).encode()).hexdigest()
@@ -49,6 +51,8 @@ def config():
     if not 0<=result['watch']<result['developing']<result['high']<=100 or not 1<=result['max_industries']<=3:
         raise ValueError('Invalid conviction thresholds')
     if not 0<=result['minimum_data_quality']<=100 or result['cooldown_hours']<0 or result['score_change']<=0:raise ValueError('Invalid publication controls')
+    if not 0<result['minimum_metric_weight']<=100:raise ValueError('Invalid available metric weight threshold')
+    if any(not isinstance(result[k],(float,int)) or not math.isfinite(result[k]) or result[k]<=0 for k in ('overextended_ma50','overextended_return21','overextended_return63')):raise ValueError('Invalid price extension thresholds')
     return result
 
 def edge(industry,pattern,business,order,earnings,check):
@@ -190,83 +194,55 @@ def verified_assertion(row,now):
         and bool(row.get('measurement_basis')) and row.get('factor') in FACTOR_LABELS
         and isinstance(row.get('score'),(float,int)) and not isinstance(row['score'],bool) and math.isfinite(row['score']) and 0<=row['score']<=100)
 
-def market_confirmation(prices,tickers,now,cfg):
-    calendar=sorted({r['trade_date'] for r in prices if r['trade_date']<=now.date().isoformat()})
-    if len(calendar)<64:return None
-    common=calendar[-64:];end=common[-1];base21=common[-22];base63=common[0]
-    def returns(symbols):
-        groups={}
-        for row in prices:
-            if row['ticker'] not in symbols or row['trade_date']>now.date().isoformat():continue
-            p=row.get('adjusted_close') or row.get('close');v=row.get('volume');c=row.get('close')
-            if not all(isinstance(x,(float,int)) and math.isfinite(x) for x in (p,v,c)) or p<=0 or c<=0 or v<0:continue
-            groups.setdefault(row['ticker'],{})[row['trade_date']]=(p,c*v)
-        results=[]
-        for ticker,points in groups.items():
-            days=sorted(points)
-            if not all(d in points for d in (end,base21,base63)) or len(set(common)&set(points))<.7*len(common):continue
-            last=end
-            if (now.date()-datetime.fromisoformat(last).date()).days>7:continue
-            results.append({'ticker':ticker,'date':last,'return21':points[last][0]/points[base21][0]-1,
-                'return63':points[last][0]/points[base63][0]-1,'turnover':statistics.median(points[d][1] for d in common[-21:] if d in points)})
-        return results
-    industry=returns(set(tickers));peer=returns({r['ticker'] for r in prices})
-    if not industry or not peer or len(industry)<.7*len(tickers):return None
-    # Same as-of date; no mixing suspended/missing-session baselines with current peers.
-    date=max(x['date'] for x in peer);industry=[x for x in industry if x['date']==date];peer=[x for x in peer if x['date']==date]
-    if len(industry)<.7*len(tickers):return None
-    r21=statistics.mean(x['return21'] for x in industry);r63=statistics.mean(x['return63'] for x in industry)
-    p21=statistics.mean(x['return21'] for x in peer);p63=statistics.mean(x['return63'] for x in peer)
-    turnover=statistics.median(x['turnover'] for x in industry)
-    score=75 if r21>p21 and r63>p63 else 55 if r21>p21 else 30
-    return {'score':score,'relative21':r21-p21,'relative63':r63-p63,'return21':r21,'return63':r63,'turnover_idr':turnover,
-        'liquid':turnover>=cfg['minimum_turnover_idr'],'date':date,'coverage':len(industry)/len(tickers),
-        'source_url':'https://finance.yahoo.com/','reason':'Adjusted-close returns vs equal-weight active watchlist, not IHSG or capital flows.'}
-
-def score_industry(link,members,profiles,prices,indicators,theme,assertions,now,cfg):
-    factors={k:{'value':None,'weight':w,'label':FACTOR_LABELS[k],'evidence':[],'reason':'Belum ada bukti terverifikasi'} for k,w in cfg['weights'].items()}
-    relevant=[x for x in indicators if x['id'] in theme['keys'] and not x['stale'] and x['regime']!='insufficient']
-    if relevant:
-        supportive=any((x['regime']=='falling' if theme['id']=='v2_monetary' else x['regime']=='rising') for x in relevant if x['id']!='usdidr')
-        opposite=any((x['regime']=='rising' if theme['id']=='v2_monetary' else x['regime']=='falling') for x in relevant)
-        factors['macro'].update(value=65 if supportive and not opposite else 35 if opposite else 45,
-            evidence=[x['source_url'] for x in relevant],reason='Arah perubahan numerik; belum membuktikan shock supply atau laba.')
-    market=market_confirmation(prices,members,now,cfg)
-    if market:factors['market'].update(value=market['score'],evidence=[market['source_url']],reason=market['reason'])
+def score_industry(link,members,profiles,prices,indicators,theme,assertions,now,cfg,benchmark=None):
+    # profiles is retained only for call compatibility; never read by this model.
+    factors={k:{'value':None,'weight':w,'label':FACTOR_LABELS[k],'evidence':[],
+        'reason':'Unavailable; excluded from score denominator'} for k,w in cfg['weights'].items()}
+    factors['macro'].update(macro_factor(indicators,theme))
+    factors['leading'].update(leading_factor(indicators,theme))
+    technical=industry_features(prices,members,benchmark or [],now,cfg)
+    market=technical['market'];coverage=technical['coverage_confidence']
+    for key,value in technical['values'].items():
+        factors[key].update(value=round(value,1) if value is not None else None,
+            evidence=[market['source_url']] if market and value is not None else [],
+            reason={'relative':'1/3/6 month representative returns vs actual IHSG; missing horizons excluded.',
+                'momentum':'Available MA20/50/200, acceleration and previous-20-session high breakout checks.',
+                'breadth':'Percentage of available representatives above MA50 with MA20 > MA50.',
+                'risk':'252-session annualized daily volatility, maximum drawdown and MA reversal risk.'}[key])
     valid=[a for a in assertions if a.get('event_id')==theme['id'] and a.get('industry')==link['industry'] and verified_assertion(a,now)]
-    for key in factors:
+    # Reviewed external macro / physical data may supply qualitative measurement.
+    # Price factors can only be computed from observed prices, never assertions.
+    for key in ('macro','leading'):
         found=[a for a in valid if a['factor']==key]
-        # Contradictory sources reduce conviction; never cherry-pick maximum.
-        if found:factors[key].update(value=min(a['score'] for a in found),evidence=sorted({a['source_url'] for a in found}),reason=' / '.join(a['reason'] for a in found))
-    exposures=[]
-    for ticker in sorted(members):
-        profile=profiles.get(ticker,{})
-        business=profile.get('profile',{}).get('longBusinessSummary') or ''
-        stamp=instant(profile.get('profile',{}).get('moduleStatus',{}).get('profile',{}).get('last_success_at') or profile.get('retrieved_at'))
-        matched=bool(stamp and stamp<=now and (now-stamp).days<=90 and re.search(link['business'],business,re.I))
-        exposure=[a for a in valid if a.get('ticker')==ticker and a.get('material_exposure') is True and a['factor']=='earnings']
-        exposures.append({'ticker':ticker,'business_match':matched,'materiality_verified':matched and bool(exposure),
-            'status':'materiality_verified' if matched and exposure else 'business_only' if matched else 'unverified',
-            'business_excerpt':business[:450] if matched else None,'retrieved_at':stamp.isoformat() if stamp else None,
-            'source_url':'https://finance.yahoo.com/quote/'+ticker+'/profile/',
-            'metrics':{k:v for k,v in profile.get('metrics',{}).items() if k in ('marketCap','trailingPE','forwardPE','priceToBook','revenueGrowth','earningsGrowth')}})
-    coverage=sum(v['weight'] for v in factors.values() if v['value'] is not None)
-    score=round(sum(v['weight']*(v['value'] or 0)/100 for v in factors.values()),1)
-    data_quality=round(coverage*(1 if all(x['release_time_known'] for x in relevant) else .9),1)
+        if found:factors[key].update(value=min(a['score'] for a in found),
+            evidence=sorted({a['source_url'] for a in found}),reason=' / '.join(a['reason'] for a in found))
+    score,included=combine_factors(factors)
     blocks=[]
-    if any(factors[k]['value'] is None for k in ('supply_demand','earnings','valuation')):blocks.append('Supply–demand, earnings atau valuation / expectations belum lengkap.')
-    if not any(e['materiality_verified'] for e in exposures):blocks.append('Eksposur revenue / laba material emiten belum terverifikasi.')
-    if not market or not market['liquid']:blocks.append('Konfirmasi harga / likuiditas belum memenuhi batas.')
-    if data_quality<cfg['minimum_data_quality']:blocks.append('Kualitas data di bawah ambang publikasi.')
-    if not relevant and not any(a['factor']=='macro' for a in valid):blocks.append('Tidak ada konfirmasi makro numerik segar.')
-    classification='High Conviction' if score>=cfg['high'] else 'Developing Conviction' if score>=cfg['developing'] else 'Watchlist' if score>=cfg['watch'] else 'Weak / Insufficient'
+    if coverage['available_stocks']<2:blocks.append('At least two independent representatives required; one stock is not industry rotation.')
+    if coverage['confidence']<cfg['minimum_data_quality']:blocks.append('Data Coverage Confidence below publication threshold.')
+    if factors['macro']['value'] is None:blocks.append('Fresh external macro alignment unavailable.')
+    elif factors['macro']['value']<cfg['developing']:blocks.append('Macro alignment does not support the beneficiary thesis.')
+    if factors['relative']['value'] is None:blocks.append('Actual IHSG relative-strength validation unavailable.')
+    elif market and any(market.get('relative'+str(n)) is None for n in (21,63,126)):
+        blocks.append('One or more 1/3/6-month IHSG comparisons unavailable.')
+    if included<cfg['minimum_metric_weight']:blocks.append('Available metric weight below publication threshold.')
+    if market and market['overextended']:blocks.append('Price rally already extended; avoid chasing, monitor consolidation.')
+    if market and market['relative_stock_counts'] and min(market['relative_stock_counts'].values())<2:
+        blocks.append('Relative strength supported by fewer than two representatives.')
+    exposures=[{'ticker':s,'status':'watchlist_representative','business_excerpt':None,
+        'source_url':'https://finance.yahoo.com/quote/'+s+'/history/','metrics':{},
+        'technical':next((f for f in technical['members'] if f['ticker']==s),None)} for s in sorted(members)]
+    classification='Insufficient evidence' if score is None else 'High Conviction' if score>=cfg['high'] else 'Developing Conviction' if score>=cfg['developing'] else 'Watchlist' if score>=cfg['watch'] else 'Weak / Insufficient'
     return {'industry':link['industry'],'taxonomy':sorted({m['industry'] for m in members.values()}) if isinstance(members,dict) else [],
-        'order':link['order'],'earnings_effect':link['earnings'],'required_confirmation':link['check'],
-        'score':score,'coverage':coverage,'data_quality':data_quality,'classification':classification,'factors':factors,
-        'market':market,'exposures':exposures,'blockers':blocks,'eligible':score>=cfg['high'] and not blocks,
-        'uncertainty':'Forecast belum terkalibrasi; skor tesis bukan probabilitas return.'}
+        'order':link['order'],'earnings_effect':link['earnings'],'required_confirmation':'Macro regime, physical leading evidence and multi-stock price confirmation; company selection remains with the user.',
+        'score':score if score is not None else 0,'score_available':score is not None,
+        'coverage':included,'included_metric_weight':included,'missing_metrics':[k for k,v in factors.items() if v['value'] is None],
+        'data_quality':coverage['confidence'],'coverage_confidence':coverage,'classification':classification,'factors':factors,
+        'market':market,'exposures':exposures,'blockers':blocks,'eligible':score is not None and score>=cfg['high'] and not blocks,
+        'uncertainty':'Research score, not a return probability. Missing factors excluded and remaining weights normalized; coverage assessed separately.'}
 
-def evaluate(dataset,news,mapping,profiles,prices,assertions,previous,now=None,cfg=None):
+
+def evaluate(dataset,news,mapping,profiles,prices,assertions,previous,now=None,cfg=None,benchmark=None):
     now=now or datetime.now(timezone.utc);cfg=cfg or config()
     indicators=macro_analytics(dataset,now);lookup={x['id']:x for x in indicators};sessions=[];seen_news=set()
     # More specific events claim a headline first; a headline is never evidence for two sessions.
@@ -285,7 +261,7 @@ def evaluate(dataset,news,mapping,profiles,prices,assertions,previous,now=None,c
         industries=[]
         for link in theme['winners']:
             members={ticker:m for ticker,m in mapping.items() if re.search(link['pattern'],m['industry'],re.I)}
-            if members:industries.append(score_industry(link,members,profiles,prices,indicators,theme,assertions,now,cfg))
+            if members:industries.append(score_industry(link,members,profiles,prices,indicators,theme,assertions,now,cfg,benchmark))
         contradicted=any(a.get('invalidates') is True for a in verified)
         adverse=any(x['regime']=='rising' for x in signals if x['id'] in ('bi','usdidr')) if theme['id']=='v2_monetary' else any(x['regime']=='falling' for x in signals)
         eligible=any(i['eligible'] for i in industries) and not contradicted
@@ -298,14 +274,14 @@ def evaluate(dataset,news,mapping,profiles,prices,assertions,previous,now=None,c
         macro_thesis=(' | '.join(observations)+'. ' if observations else f"{len(evidence)} judul media terkait, tetapi indikator numerik khusus tema belum tersedia. ")
         macro_thesis+='Transmisi yang diuji: '+theme['chain'][1]+'. Harga / judul saja belum membuktikan kondisi supply, demand atau laba.'
         session={k:copy.deepcopy(theme[k]) for k in ('id','title','kind','chain','losers','invalidate','checks','reference')}
-        session.update(status=status,horizon_months=[1,3,6],score=max((i['score'] for i in industries),default=0),industries=industries,
+        session.update(methodology={'version':VERSION,'weights':cfg['weights'],'normalization':'Available factors only; coverage confidence separate','benchmark':'IHSG ^JKSE'},status=status,horizon_months=[1,3,6],score=max((i['score'] for i in industries),default=0),industries=industries,
             evidence=evidence[:8],indicators=[{k:v for k,v in x.items() if k!='history'} for x in signals],
             quantitative_charts=[{'id':x['id'],'name':x['name'],'unit':x['unit'],'source_url':x['source_url'],'frequency':x['frequency'],'points':x['history'][-65:]} for x in signals if len(x['history'])>=2][:2],
             assertions=verified,missing_indicators=required,contradicted=contradicted,
             interpretation=' → '.join(theme['chain']),macro_thesis=macro_thesis,
             forecast='Hipotesis dampak laba 1–6 bulan; belum merupakan forecast return yang tervalidasi.',
             counterargument='Kenaikan pendapatan dapat diserap biaya, supply baru, pajak, leverage atau valuasi yang sudah mahal.',
-            pricing='P/E dan PBV snapshot tidak membuktikan valuation gap. Konsensus point-in-time dan ekspektasi pasar belum lengkap.',
+            pricing='Harga yang sudah terlalu jauh dari MA50 atau telah rally ekstrem tidak masuk shortlist. Ini ukuran extension harga, bukan valuasi fundamental.',
             scenarios={'bull':'Demand / ASP dan order terkonfirmasi, biaya terkendali, ekspektasi belum tercermin dalam valuasi.',
                 'base':'Transmisi bertahap; tunggu bukti margin, kontrak, volume dan harga relatif.',
                 'bear':'Pasokan / demand berbalik, biaya atau pendanaan memburuk, ekspektasi sudah priced in.'},
@@ -336,16 +312,46 @@ def evaluate(dataset,news,mapping,profiles,prices,assertions,previous,now=None,c
             'industries':[(i['industry'],i['eligible'],i['classification']) for i in s['industries']],
             'contradiction_ids':sorted(a['id'] for a in s['assertions'] if a.get('invalidates'))})
     top=sorted((i for k,i in ranked.items() if k not in veto),key=lambda i:(-i['score'],i['industry']))[:cfg['max_industries']]
+    # Downside ranking is conditional macro transmission plus observed weakness,
+    # not an inverted return probability or an automatic short recommendation.
+    downside=[]
+    adverse_patterns={'Air transportation':r'Air Transportation',
+        'Energy-intensive manufacturing':r'Construction Materials|Steel|Pulp & Paper',
+        'Downstream food producers':r'Snack|Instant Noodle|Milk|Cheese|Staple Food',
+        'Unhedged palm downstream users':r'Snack|Instant Noodle|Staple Food',
+        'Deposit-spread sensitive banks':r'Bank',
+        'High-cost nickel producers':r'^Nickel$',
+        'Importers / exporters':r'Logistics & Shipment|Automobiles|Computer Hardware'}
+    for s in sessions:
+        for adverse in s['losers']:
+            pattern=adverse_patterns.get(adverse['industry'])
+            if not pattern:continue
+            for label in sorted({m['industry'] for m in mapping.values() if re.search(pattern,m['industry'],re.I)}):
+                members={t:m for t,m in mapping.items() if m['industry']==label}
+                observed=industry_features(prices,members,benchmark or [],now,cfg)
+                market=observed['market']
+                if not market:continue
+                price_factors={k:100-v for k,v in observed['values'].items() if v is not None}
+                score=round(sum(v*cfg['weights'][k] for k,v in price_factors.items())/sum(cfg['weights'][k] for k in price_factors),1) if price_factors else None
+                downside.append({'industry':label,'event':s['title'],'mechanism':adverse['mechanism'],
+                    'price_pressure_score':score,'metric_weight':sum(cfg['weights'][k] for k in price_factors),
+                    'coverage_confidence':observed['coverage_confidence'],'market':market,
+                    'status':'conditional adverse exposure; physical/business sensitivity not verified',
+                    'confirmed_industry_weakness':observed['coverage_confidence']['available_stocks']>=2 and market.get('relative63') is not None and market['relative63']<0,
+                    'scope':'Price-pressure ranking only, distinct from beneficiary conviction. Conditional macro downside; not a short recommendation.'})
+    downside.sort(key=lambda x:-(x['price_pressure_score'] if x['price_pressure_score'] is not None else -1))
     anomalies=[{'indicator':i['id'],'zscore':i['zscore_daily_change'],'source_url':i['source_url'],'status':'unmapped_research_question'}
         for i in indicators if not i['stale'] and i['zscore_daily_change'] is not None and abs(i['zscore_daily_change'])>=3 and not any(i['id'] in t['keys'] for t in GRAPH)]
     return {'version':VERSION,'generated_at':now.isoformat(),'sessions':sessions,'top_industries':top,
+        'avoid_industries':[{'industry':x['industry'],'mechanism':x['mechanism'],'event':s['title'],'status':'conditional adverse transmission; not a short recommendation'} for s in sessions for x in s['losers']],
+        'downside_ranking':downside[:10],
         'empty_message':None if top else 'No New High-Conviction Sectoral Opportunity.',
         'macro':indicators,'regimes':joint_regimes(indicators),'transitions':regime_transitions(indicators,(previous or {}).get('macro',[])),
         'anomalies':anomalies,'config':cfg,'external_failures':dataset.get('failures',[]),
         'layer_status':{'deterministic':'active','price_ml':'existing price-only research model; failed validation remains gated',
-            'llm':'not_configured; no autonomous causal discovery claimed','verification':'source / timestamp / exposure gates active',
-            'historical_macro_model':'not_validated: release vintages, issuer exposure and official benchmark coverage incomplete'},
-        'data_gaps':['Consensus earnings revisions, issuer segment materiality and valuation gap require reviewed evidence.',
+            'llm':'not_configured; no autonomous causal discovery claimed','verification':'source / timestamp / IHSG benchmark / representative coverage gates active',
+            'historical_macro_model':'not_validated: macro release vintages incomplete; technical diagnostic is separate from combined macro validation'},
+        'data_gaps':['Company fundamentals are excluded from scoring. Full IDX coverage is not required; representative concentration is disclosed.',
             'Freight / inventories / China credit / PMI / M2 and Indonesian sector GDP coverage incomplete.',
             'Historical cases in the supplied thesis are hypotheses, not labelled training samples.'],
         'scope':'Industry research; no automated orders. Unknown releases / revisions stay unknown; no retrospective macro backtest.'}
@@ -377,9 +383,13 @@ def run_intelligence(cloud,mapping,news,prices,now=None,dataset=None):
         contexts=read(cloud,'sector_macro_context?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'payload','payload->intelligence_dataset':'not.is.null','order':'generated_at.desc','limit':1}))
         dataset=copy.deepcopy(contexts[0]['payload'].get('intelligence_dataset',{})) if contexts else {}
         dataset.setdefault('failures',[]).append({'provider':'macro_snapshot','error':'Local refresh unavailable; retained verified cloud snapshot'})
-    profiles=read(cloud,'current_stock_company_snapshots?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'symbol,retrieved_at,profile,metrics','limit':200}))
+    from .ihsg_benchmark import benchmark_history
+    benchmark=benchmark_history(cloud)
     assertions=read(cloud,'sector_evidence_assertions?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'payload','limit':1000}))
-    result=evaluate(dataset,news,mapping,{p['symbol']:p for p in profiles},prices,[a['payload'] for a in assertions],prior,now)
+    result=evaluate(dataset,news,mapping,{},prices,[a['payload'] for a in assertions],prior,now,benchmark=benchmark)
+    validation_file=ROOT/'.private/sector-model/rotation-validation.json'
+    validation=json.loads(validation_file.read_text(encoding='utf8')) if validation_file.exists() else prior.get('technical_backtest')
+    if validation and validation.get('weights')==result['config']['weights']:result['technical_backtest']=validation
     heads=read(cloud,'sectoral_thesis_revisions?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'session_id,revision,published_at,payload','order':'published_at.desc','limit':200}))
     latest={}
     for r in heads:latest.setdefault(r['session_id'],r)

@@ -14,7 +14,7 @@ from .cloud import SupabaseStore, CloudUnavailable
 from .feeds import approved_article
 from .market_news import read, SCHEDULE
 
-VERSION='headlines-rules-v1'
+VERSION='macro-headlines-ihsg-v2'
 JAKARTA=timezone(timedelta(hours=7))
 FIELDS='id,title,url,provider,topic,published_at,first_seen_at,quality_flag'
 # A direction must follow the named subject in the SAME short clause.
@@ -73,16 +73,18 @@ def classification(title):
     # Multi-event headlines are too ambiguous for a directional theme assignment.
     return found if len(found)==1 else []
 
-def build_report(articles,cutoff=None):
+def build_report(articles,cutoff=None,knowledge_cutoff=None):
     cutoff=cutoff or datetime.now(timezone.utc)
     if cutoff.tzinfo is None:raise ValueError('Timezone-aware cutoff required')
     cutoff=cutoff.astimezone(timezone.utc);start=cutoff-timedelta(hours=24)
+    knowledge_cutoff=knowledge_cutoff or cutoff
+    if knowledge_cutoff<cutoff:raise ValueError('Knowledge clock precedes publication cutoff')
     eligible=[];excluded=Counter();seen=set()
     for a in sorted(articles,key=lambda a:a.get('published_at') or '',reverse=True):
         if not approved_article(a):excluded['unapproved']+=1;continue
         published=instant(a.get('published_at'));known=instant(a.get('first_seen_at'))
         if not published:excluded['undated']+=1;continue
-        if not known or known>cutoff or published>cutoff or published<=start:excluded['outside_window']+=1;continue
+        if not known or known>knowledge_cutoff or published>cutoff or published<=start:excluded['outside_window']+=1;continue
         # Exact normalized titles across publishers count once, rather than RSS duplicates.
         normalized=re.sub(r'\W+',' ',a['title'].casefold()).strip()
         if normalized in seen:excluded['duplicate']+=1;continue
@@ -114,9 +116,14 @@ def build_report(articles,cutoff=None):
     if not eligible:conclusion='Belum ada berita bertanggal yang memenuhi jendela analisis. Kesimpulan arah pasar belum dapat dibuat.'
     elif not enough:conclusion='Bukti arah pasar belum cukup beragam untuk menghitung skor. '+summary+' Pantau konfirmasi data pasar dan isi berita sumber.'
     else:conclusion=('Tema berita cenderung mendukung selera risiko. ' if score>=20 else 'Tema berita cenderung menekan selera risiko. ' if score<=-20 else 'Dukungan dan tekanan berita masih berimbang. ')+summary+' Ini ringkasan sentimen judul; arah maupun besaran perubahan IHSG belum diprediksi.'
-    identity={'version':VERSION,'start':start.isoformat(),'cutoff':cutoff.isoformat(),'articles':eligible}
+    ihsg_rows=[a for a in eligible if re.search(r'ihsg|bursa efek indonesia|pasar saham indonesia',a['title'],re.I)]
+    conclusion='Implikasi untuk IHSG / pasar saham Indonesia: '+conclusion
+    identity={'version':VERSION,'start':start.isoformat(),'cutoff':cutoff.isoformat(),'knowledge_cutoff':knowledge_cutoff.isoformat(),'articles':eligible}
     fingerprint=hashlib.sha256(json.dumps(identity,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
-    return {'report_id':fingerprint,'report_date':cutoff.astimezone(JAKARTA).date().isoformat(),'generated_at':cutoff.isoformat(),
+    return {'report_id':fingerprint,'report_date':cutoff.astimezone(JAKARTA).date().isoformat(),'generated_at':knowledge_cutoff.isoformat(),
+            'knowledge_cutoff':knowledge_cutoff.isoformat(),'publication_cutoff':cutoff.isoformat(),
+            'ihsg':{'summary':'IHSG selalu menjadi fokus analisis domestik. '+('Tersedia judul terkait IHSG; arah pre-open tetap perlu konfirmasi saat pembukaan.' if ihsg_rows else 'Belum ada judul IHSG langsung pada jendela ini; tidak dibuat kesimpulan arah pembukaan.'),'evidence':ihsg_rows[:8],'status':'headline_evidence' if ihsg_rows else 'insufficient_direct_evidence'},
+            'timing_note':'Batas waktu berdasarkan timestamp publikasi sumber. Koleksi dapat selesai sesudah cutoff; waktu pertama terlihat dipertahankan. Bukan dataset point-in-time yang diketahui tepat pada pukul 08:00.',
             'window_start':start.isoformat(),'window_end':cutoff.isoformat(),'method':VERSION,'label':label,'score':score,
             'article_count':len(eligible),'providers':providers,'excluded':dict(excluded),'summary':summary,'conclusion':conclusion,
             'positive':positive,'negative':negative,'mixed':mixed,'unclassified':unclassified,
@@ -124,23 +131,39 @@ def build_report(articles,cutoff=None):
             'method_note':'Aturan judul berita, bukan model AI/ML. Skor = 100 × (tema positif − tema negatif) / tema berarah. Setiap tema memiliki satu suara, berapa pun jumlah artikelnya. Minimal 3 tema berarah, 5 judul unik, dan 2 penerbit. Skor bukan probabilitas, return, atau rekomendasi transaksi.',
             'scope_note':'Hanya judul dan metadata; isi artikel belum dibaca. Dampak sektoral adalah hipotesis bersyarat. Berita tanpa waktu publikasi dan judul ambigu tidak diberi skor.'}
 
-def collect_inputs(cloud,cutoff):
+def collect_inputs(cloud,cutoff,knowledge_cutoff=None):
     """Bounded pagination, with first-seen cutoff preventing retrospective lookahead."""
     start=cutoff-timedelta(hours=24);result=[]
     for offset in range(0,5000,500):
         page=read(cloud,'news_items?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':FIELDS,
-            'and':f'(published_at.gt.{start.isoformat()},published_at.lte.{cutoff.isoformat()},first_seen_at.lte.{cutoff.isoformat()})',
+            'and':f'(published_at.gt.{start.isoformat()},published_at.lte.{cutoff.isoformat()},first_seen_at.lte.{(knowledge_cutoff or cutoff).isoformat()})',
             'order':'published_at.desc,id','limit':500,'offset':offset}))
         result.extend(page)
         if len(page)<500:return result
     raise CloudUnavailable('News analysis input limit exceeded; report not replaced')
 
 def generate_daily_analysis(cloud=None,cutoff=None,session='manual'):
-    cloud=cloud or SupabaseStore();cutoff=cutoff or datetime.now(timezone.utc);started=cutoff.isoformat();run=str(uuid.uuid4())
+    cloud=cloud or SupabaseStore();actual=datetime.now(timezone.utc);explicit=cutoff is not None
+    if cutoff is None:
+        local=actual.astimezone(JAKARTA)
+        cutoff=local.replace(hour=17 if session=='close' else 8,minute=15 if session=='close' else 0,second=0,microsecond=0)
+        if cutoff>local:cutoff-=timedelta(days=1)
+        cutoff=cutoff.astimezone(timezone.utc)
+    started=actual.isoformat();run=str(uuid.uuid4())
     try:
-        report=build_report(collect_inputs(cloud,cutoff),cutoff)
+        knowledge=cutoff if explicit else actual
+        report=build_report(collect_inputs(cloud,cutoff,knowledge),cutoff,knowledge)
+        try:
+            from .ihsg_benchmark import benchmark_history
+            bars=benchmark_history(cloud,cutoff)
+            last=bars[-1] if bars else None;previous=bars[-2] if len(bars)>1 else None
+            report['ihsg']['benchmark']={'status':'available' if last else 'unavailable','symbol':'^JKSE',
+                'close':last['close'] if last else None,'trade_date':last['trade_date'] if last else None,
+                'daily_change_percent':100*(last['close']/previous['close']-1) if last and previous and previous['close'] else None,
+                'source_url':'https://finance.yahoo.com/quote/%5EJKSE/history/'}
+        except (CloudUnavailable,KeyError,TypeError):report['ihsg']['benchmark']={'status':'unavailable','symbol':'^JKSE'}
         report['session']=session
-        report['report_id']=hashlib.sha256((report['report_id']+':'+session).encode()).hexdigest()
+        report['report_id']=hashlib.sha256((report['report_id']+':'+session+json.dumps(report['ihsg'],sort_keys=True)).encode()).hexdigest()
         row={'owner_id':cloud.owner,'report_id':report['report_id'],'report_date':report['report_date'],
              'generated_at':report['generated_at'],'method':VERSION,'report':report}
         written=cloud.request('daily_market_analysis?on_conflict=owner_id,report_id',[row],prefer='resolution=ignore-duplicates,return=representation')
