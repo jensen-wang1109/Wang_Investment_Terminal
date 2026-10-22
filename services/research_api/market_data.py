@@ -123,11 +123,20 @@ def sync_market_history(cloud=None,symbols=None,force=False):
                 frame=retry_transient(lambda:ticker.history(start=start,end=end,auto_adjust=False,actions=False))
                 if frame is None or frame.empty:raise ValueError('Source returned no history')
                 points,rejected=normalize_history(item,frame,ticker.history_metadata,now)
-            for offset in range(0,len(points),500):cloud.ingest(series_record(item),points[offset:offset+500],str(uuid.uuid4()))
+            prior={p['observation_date']:p for p in cloud.history(item['id'])} if last else {}
+            def equal(a,b):return a is None and b is None or a is not None and b is not None and abs(float(a)-float(b))<=1e-8
+            for point in points:
+                current=prior.get(point['observation_date'])
+                if not current:continue
+                same=all(equal(current.get(k),point.get(k)) for k in ('value','open','high','low','volume','adjusted_close')) and current.get('quality_flag')==point['quality_flag']
+                # A vendor may revise A -> B -> A. Reusing A's original hash
+                # would ignore the correction and leave B as the current view.
+                # Chain changed revisions; reuse the CURRENT hash for no change.
+                point['revision_hash']=current['revision_hash'] if same else checksum({'observation':point['revision_hash'],'supersedes':current['revision_hash']})
+            for offset in range(0,len(points),500):retry_transient(lambda:cloud.ingest(series_record(item),points[offset:offset+500],str(uuid.uuid4())))
             stored={p['observation_date']:p for p in cloud.history(item['id'])}
             if any(p['observation_date'] not in stored or any(finite(stored[p['observation_date']].get(k))!=p.get(k) for k in ('value','open','high','low','volume','adjusted_close')) for p in points):
                 # PostgreSQL stores 10 decimals; compare within that explicit precision.
-                def equal(a,b):return a is None and b is None or a is not None and b is not None and abs(float(a)-float(b))<=1e-8
                 if any(p['observation_date'] not in stored or any(not equal(stored[p['observation_date']].get(k),p.get(k)) for k in ('value','open','high','low','volume','adjusted_close')) for p in points):raise CloudUnavailable('Market OHLCV write verification mismatch')
             results.append({'symbol':item['symbol'],'status':'success','database_verified':True,'rows':len(stored),'received':len(points),'rejected':rejected,'last_date':max(stored)})
         except Exception as error:
@@ -135,7 +144,7 @@ def sync_market_history(cloud=None,symbols=None,force=False):
             cloud.request('ingestion_runs',[{'owner_id':cloud.owner,'run_id':run,'series_id':item['id'],'started_at':started,
                 'finished_at':datetime.now(timezone.utc).isoformat(),'status':'failed','inserted_rows':0,'duplicate_rows':0,
                 'error_code':('access_restricted:'+str(status)) if status in (401,403,429) else type(error).__name__+': existing data retained'}])
-            results.append({'symbol':item['symbol'],'status':'failed','http_status':status,'error':str(error) if isinstance(error,ValueError) else type(error).__name__})
+            results.append({'symbol':item['symbol'],'status':'failed','http_status':status,'error':str(error) if isinstance(error,(ValueError,CloudUnavailable)) else type(error).__name__})
             if status==429:break
         time.sleep(.4)
     CACHE.mkdir(parents=True,exist_ok=True);(CACHE/'history-sync.json').write_text(json.dumps({'generated_at':now.isoformat(),'results':results}),encoding='utf8')

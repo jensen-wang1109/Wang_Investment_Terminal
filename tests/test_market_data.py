@@ -62,4 +62,17 @@ class MarketDataTests(unittest.TestCase):
   yf=Mock();yf.Ticker.side_effect=ticker
   rows,_=cross_history(instrument('CNYIDR=X'),yf,'2026-10-20','2026-10-23',NOW)
   self.assertEqual(rows[0]['value'],2500);self.assertEqual(rows[0]['quality_flag'],'derived_cross:CNYIDR=X');self.assertIsNone(rows[0]['open'])
+ def test_vendor_reverting_to_an_old_value_creates_a_current_revision_without_duplicate_growth(self):
+  c=Mock();saved={};revisions=set();current={}
+  c.latest_date.return_value='2026-10-21';c.history.side_effect=lambda _:list(current.values())
+  def ingest(series,points,run):
+   for p in points:
+    if p['revision_hash'] not in revisions:revisions.add(p['revision_hash']);current[p['observation_date']]=dict(p)
+  c.ingest.side_effect=ingest;t=Mock();t.history_metadata=self.metadata()
+  with tempfile.TemporaryDirectory() as directory,patch('yfinance.Ticker',return_value=t),patch('services.research_api.market_data.CACHE',Path(directory)),patch('services.research_api.market_data.time.sleep'):
+   for volume in (30,50,30,30):
+    frame=self.frame();frame['Volume']=volume;t.history.return_value=frame
+    self.assertEqual(sync_market_history(c,['^GSPC'])['status'],'success')
+    self.assertEqual(current['2026-10-21']['volume'],volume)
+  self.assertEqual(len(revisions),3)
 if __name__=='__main__':unittest.main()
