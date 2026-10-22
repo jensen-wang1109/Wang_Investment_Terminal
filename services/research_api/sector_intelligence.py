@@ -337,14 +337,19 @@ def evaluate(dataset,news,mapping,profiles,prices,assertions,previous,now=None,c
                     'price_pressure_score':score,'metric_weight':sum(cfg['weights'][k] for k in price_factors),
                     'coverage_confidence':observed['coverage_confidence'],'market':market,
                     'status':'conditional adverse exposure; physical/business sensitivity not verified',
-                    'confirmed_industry_weakness':observed['coverage_confidence']['available_stocks']>=2 and market.get('relative63') is not None and market['relative63']<0,
+                    'confirmed_industry_weakness':observed['coverage_confidence']['available_stocks']>=2 and observed['coverage_confidence']['confidence']>=cfg['minimum_data_quality'] and all(market.get('relative'+str(n)) is not None for n in (21,63,126)) and market['relative63']<0 and market['breadth_pct'] is not None and market['breadth_pct']<50,
                     'scope':'Price-pressure ranking only, distinct from beneficiary conviction. Conditional macro downside; not a short recommendation.'})
-    downside.sort(key=lambda x:-(x['price_pressure_score'] if x['price_pressure_score'] is not None else -1))
+    unique_downside={}
+    for item in downside:
+        key=item['industry']
+        if key not in unique_downside or (item['price_pressure_score'] or 0)>(unique_downside[key]['price_pressure_score'] or 0):unique_downside[key]=item
+    downside=sorted(unique_downside.values(),key=lambda x:-(x['price_pressure_score'] if x['price_pressure_score'] is not None else -1))
     anomalies=[{'indicator':i['id'],'zscore':i['zscore_daily_change'],'source_url':i['source_url'],'status':'unmapped_research_question'}
         for i in indicators if not i['stale'] and i['zscore_daily_change'] is not None and abs(i['zscore_daily_change'])>=3 and not any(i['id'] in t['keys'] for t in GRAPH)]
     return {'version':VERSION,'generated_at':now.isoformat(),'sessions':sessions,'top_industries':top,
         'avoid_industries':[{'industry':x['industry'],'mechanism':x['mechanism'],'event':s['title'],'status':'conditional adverse transmission; not a short recommendation'} for s in sessions for x in s['losers']],
-        'downside_ranking':downside[:10],
+        'downside_ranking':[x for x in downside if x['confirmed_industry_weakness']][:5],
+        'downside_watchlist':[x for x in downside if not x['confirmed_industry_weakness']],
         'empty_message':None if top else 'No New High-Conviction Sectoral Opportunity.',
         'macro':indicators,'regimes':joint_regimes(indicators),'transitions':regime_transitions(indicators,(previous or {}).get('macro',[])),
         'anomalies':anomalies,'config':cfg,'external_failures':dataset.get('failures',[]),
