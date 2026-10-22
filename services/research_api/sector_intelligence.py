@@ -390,6 +390,9 @@ def run_intelligence(cloud,mapping,news,prices,now=None,dataset=None):
     validation_file=ROOT/'.private/sector-model/rotation-validation.json'
     validation=json.loads(validation_file.read_text(encoding='utf8')) if validation_file.exists() else prior.get('technical_backtest')
     if validation and validation.get('weights')==result['config']['weights']:result['technical_backtest']=validation
+    # JSON object keys are strings in PostgreSQL/PostgREST. Canonicalize nested
+    # MA/horizon maps before hashing and exact database readback comparison.
+    result=json.loads(json.dumps(result,allow_nan=False))
     heads=read(cloud,'sectoral_thesis_revisions?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'session_id,revision,published_at,payload','order':'published_at.desc','limit':200}))
     latest={}
     for r in heads:latest.setdefault(r['session_id'],r)
@@ -415,7 +418,11 @@ def run_intelligence(cloud,mapping,news,prices,now=None,dataset=None):
     existing=read(cloud,'sector_intelligence_evaluations?'+urlencode({'owner_id':'eq.'+cloud.owner,'evaluation_id':'eq.'+result['evaluation_id'],'select':'payload','limit':1}))
     coverage={'macro_status':'partial' if result['external_failures'] else 'available' if result['macro'] else 'unavailable',
         'indicator_count':len(result['macro']),'session_count':len(result['sessions'])}
-    if existing and not publications:return {'published':0,'notifications_created':0,'database_verified':True,'evaluation_id':result['evaluation_id'],'eligible_industries':len(result['top_industries']),'unchanged':True,**coverage}
+    if existing and not publications:
+        prior_stable=copy.deepcopy(existing[0]['payload']);prior_stable.pop('generated_at',None);prior_stable.pop('evaluation_id',None)
+        for session in prior_stable['sessions']:session.pop('updated_at',None)
+        if digest(prior_stable)!=result['evaluation_id']:raise CloudUnavailable('Stored evaluation hash mismatch')
+        return {'published':0,'notifications_created':0,'database_verified':True,'evaluation_id':result['evaluation_id'],'eligible_industries':len(result['top_industries']),'unchanged':True,**coverage}
     outcome=cloud.request('rpc/publish_sector_intelligence',{'target_owner':cloud.owner,'evaluation':result,'proposals':publications})
     check=read(cloud,'sector_intelligence_evaluations?'+urlencode({'owner_id':'eq.'+cloud.owner,'evaluation_id':'eq.'+result['evaluation_id'],'select':'payload','limit':1}))
     if not check or check[0]['payload']!=result:raise CloudUnavailable('Intelligence evaluation readback mismatch')

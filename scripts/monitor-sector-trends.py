@@ -9,5 +9,8 @@ if __name__=='__main__':
     load_server_environment()
     try:print(json.dumps(run_monitor(refresh_news=not args.skip_news,force_train=args.train)),flush=True)
     except Exception as error:
-        print(json.dumps({'status':'failed','error_type':type(error).__name__,'reason':'Prior verified sector reports retained; inspect database/source availability'}),flush=True)
+        from services.research_api.cloud import CloudUnavailable
+        print(json.dumps({'status':'failed','error_type':type(error).__name__,
+            'reason':str(error) if isinstance(error,CloudUnavailable) else 'Prior verified sector reports retained; inspect database/source availability',
+            'http_status':getattr(error,'status_code',None)}),flush=True)
         raise SystemExit(2)

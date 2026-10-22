@@ -145,6 +145,34 @@ class IntelligenceTests(unittest.TestCase):
         self.assertIsNone(next(p for p in merged['observations'] if p['seriesId']=='brent')['publishedAt'])
         self.assertEqual(merged['failures'],current['failures'])
 
+    def test_new_evaluation_verifies_json_transport_and_replay_hash_without_company_query(self):
+        import json,tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from services.research_api.sector_intelligence import run_intelligence
+        from services.research_api.cloud import CloudUnavailable
+        class Cloud:
+            owner='fixture-owner'
+            saved=None
+            def request(self,path,body=None,prefer=None):
+                table=path.split('?')[0]
+                if table=='market_benchmark_prices_daily':return benchmark()
+                if table=='sector_evidence_assertions' or table=='sectoral_thesis_revisions':return []
+                if table=='sector_intelligence_evaluations':return [{'payload':self.saved}] if self.saved else []
+                if table=='rpc/publish_sector_intelligence':
+                    self.saved=json.loads(json.dumps(body['evaluation']))
+                    return {'published':0,'notifications_created':0}
+                raise AssertionError('Unexpected table / fundamental dependency: '+table)
+        c=Cloud()
+        with tempfile.TemporaryDirectory() as directory,patch('services.research_api.sector_intelligence.ROOT',Path(directory)):
+            first=run_intelligence(c,MAPPING,[],prices(),NOW,dataset())
+            self.assertTrue(first['database_verified'])
+            again=run_intelligence(c,MAPPING,[],prices(),NOW+timedelta(hours=1),dataset())
+            self.assertTrue(again['unchanged'])
+            c.saved['sessions'][0]['score']+=1
+            with self.assertRaisesRegex(CloudUnavailable,'hash mismatch'):
+                run_intelligence(c,MAPPING,[],prices(),NOW+timedelta(hours=1),dataset())
+
     def test_two_page_pdf_is_revision_exact_with_real_links_no_raster_assets(self):
         from services.research_api.sector_thesis_pdf import render_sector_thesis
         from pypdf import PdfReader
