@@ -1,7 +1,10 @@
 import unittest
+import tempfile
+from pathlib import Path
+from unittest.mock import Mock,patch
 from datetime import datetime,timezone
 import pandas as pd
-from services.research_api.market_data import normalize_history,instrument,last_completed_day,normalize_commodity
+from services.research_api.market_data import normalize_history,instrument,last_completed_day,normalize_commodity,sync_market_history
 NOW=datetime(2026,10,22,8,tzinfo=timezone.utc)
 class MarketDataTests(unittest.TestCase):
  def metadata(self):return {'symbol':'^GSPC','instrumentType':'INDEX','currency':'USD','exchangeTimezoneName':'America/New_York','currentTradingPeriod':{'regular':{'end':pd.Timestamp('2026-10-22T16:00:00-04:00')}}}
@@ -34,4 +37,12 @@ class MarketDataTests(unittest.TestCase):
   row={'value':'gold','currency_unit':'USD','unit':'troy_ounce','price':100,'updated':NOW.timestamp()}
   for changed in [{'price':float('nan')},{'updated':NOW.timestamp()+86400},{'unit':'unknown'},{'currency_unit':'unknown'}]:
    with self.assertRaises(ValueError):normalize_commodity({**row,**changed},NOW)
+ def test_recent_stored_session_does_not_skip_incremental_source_refresh(self):
+  cloud=Mock();cloud.latest_date.return_value=datetime.now(timezone.utc).date().isoformat()
+  stored=[];cloud.ingest.side_effect=lambda series,points,run:stored.extend(points)
+  cloud.history.side_effect=lambda series:stored
+  ticker=Mock();ticker.history.return_value=self.frame();ticker.history_metadata=self.metadata()
+  with tempfile.TemporaryDirectory() as directory,patch('yfinance.Ticker',return_value=ticker),patch('services.research_api.market_data.CACHE',Path(directory)),patch('services.research_api.market_data.time.sleep'):
+   result=sync_market_history(cloud,['^GSPC'])
+  ticker.history.assert_called_once();self.assertTrue(result['results'][0]['database_verified'])
 if __name__=='__main__':unittest.main()

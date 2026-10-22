@@ -72,8 +72,9 @@ def sync_market_history(cloud=None,symbols=None,force=False):
         run=str(uuid.uuid4());started=datetime.now(timezone.utc).isoformat()
         try:
             last=cloud.latest_date(item['id'])
-            if not force and last and last>=(now.date()-timedelta(days=1)).isoformat():
-                results.append({'symbol':item['symbol'],'status':'unchanged','last_date':last});continue
+            # Yesterday's row is not proof that today's newly completed session
+            # has been collected. Always refresh a small overlap, including
+            # source revisions; the database revision hash deduplicates it.
             start=(datetime.fromisoformat(last).date()-timedelta(days=8)).isoformat() if last else (now.date()-timedelta(days=365*5+10)).isoformat()
             ticker=yf.Ticker(item['symbol'])
             frame=retry_transient(lambda:ticker.history(start=start,end=(now.date()+timedelta(days=1)).isoformat(),auto_adjust=False,actions=False))
