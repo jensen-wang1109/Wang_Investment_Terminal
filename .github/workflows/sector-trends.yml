@@ -36,5 +36,5 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 0 * * *'
         continue-on-error: true
         run: python scripts/fetch-macro.py
-      - name: Monitor evidence, train when due, publish only material changes
+      - name: Refresh shared macro-sector model and publish only material changes
         run: python scripts/monitor-sector-trends.py

@@ -14,7 +14,7 @@ from .cloud import SupabaseStore, CloudUnavailable
 from .feeds import approved_article
 from .market_news import read, SCHEDULE
 
-VERSION='macro-headlines-ihsg-v2'
+VERSION='macro-headlines-shared-v3'
 JAKARTA=timezone(timedelta(hours=7))
 FIELDS='id,title,url,provider,topic,published_at,first_seen_at,quality_flag'
 # A direction must follow the named subject in the SAME short clause.
@@ -162,8 +162,12 @@ def generate_daily_analysis(cloud=None,cutoff=None,session='manual'):
                 'daily_change_percent':100*(last['close']/previous['close']-1) if last and previous and previous['close'] else None,
                 'source_url':'https://finance.yahoo.com/quote/%5EJKSE/history/'}
         except (CloudUnavailable,KeyError,TypeError):report['ihsg']['benchmark']={'status':'unavailable','symbol':'^JKSE'}
+        if not explicit:
+            from .shared_intelligence import refresh_shared_context
+            shared=refresh_shared_context(cloud,publication_cutoff=cutoff)
+            report['shared_analysis_id']=shared['analysis_id']
         report['session']=session
-        report['report_id']=hashlib.sha256((report['report_id']+':'+session+json.dumps(report['ihsg'],sort_keys=True)).encode()).hexdigest()
+        report['report_id']=hashlib.sha256((report['report_id']+':'+session+json.dumps(report['ihsg'],sort_keys=True)+':'+report.get('shared_analysis_id','')).encode()).hexdigest()
         row={'owner_id':cloud.owner,'report_id':report['report_id'],'report_date':report['report_date'],
              'generated_at':report['generated_at'],'method':VERSION,'report':report}
         written=cloud.request('daily_market_analysis?on_conflict=owner_id,report_id',[row],prefer='resolution=ignore-duplicates,return=representation')

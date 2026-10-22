@@ -1,0 +1,449 @@
+{
+  "version": "macro-topics-curated-v2",
+  "provenance": "Authored educational scenarios, not historical market observations. Training does not use stored publisher news or restricted provider prices.",
+  "task": "topic classification only; fact status and economic transmission are independently verified/conditional",
+  "train": [
+    {
+      "text": "MSCI konsultasi status Indonesia standalone market",
+      "label": "market_access"
+    },
+    {
+      "text": "Usulan reklasifikasi emerging market ke standalone",
+      "label": "market_access"
+    },
+    {
+      "text": "Transparansi free float dan aksesibilitas indeks MSCI",
+      "label": "market_access"
+    },
+    {
+      "text": "Foreign index funds assess Indonesia investability",
+      "label": "market_access"
+    },
+    {
+      "text": "MSCI meninjau klasifikasi pasar saham Indonesia",
+      "label": "market_access"
+    },
+    {
+      "text": "Investor asing khawatir struktur kepemilikan dan dana pasif",
+      "label": "market_access"
+    },
+    {
+      "text": "MSCI membekukan penambahan saham ke indeks Indonesia",
+      "label": "market_access"
+    },
+    {
+      "text": "Indonesia reforms ownership disclosure after MSCI review",
+      "label": "market_access"
+    },
+    {
+      "text": "Harga minyak mentah naik karena gangguan pasokan",
+      "label": "energy"
+    },
+    {
+      "text": "Brent dan WTI melemah setelah persediaan minyak meningkat",
+      "label": "energy"
+    },
+    {
+      "text": "Krisis energi dan penutupan rute pengiriman minyak",
+      "label": "energy"
+    },
+    {
+      "text": "Oil supply shock raises crude prices and fuel costs",
+      "label": "energy"
+    },
+    {
+      "text": "Biaya bunker kapal naik mengikuti harga minyak",
+      "label": "energy"
+    },
+    {
+      "text": "Produksi minyak OPEC turun dan tarif tanker meningkat",
+      "label": "energy"
+    },
+    {
+      "text": "Lonjakan gas alam mengangkat biaya energi industri",
+      "label": "energy"
+    },
+    {
+      "text": "Harga minyak tidak naik meski ada ancaman gangguan",
+      "label": "energy"
+    },
+    {
+      "text": "The Fed menaikkan suku bunga AS",
+      "label": "global_monetary"
+    },
+    {
+      "text": "US Treasury yields and dollar tighten global liquidity",
+      "label": "global_monetary"
+    },
+    {
+      "text": "Inflasi Amerika meningkat dan Federal Reserve hawkish",
+      "label": "global_monetary"
+    },
+    {
+      "text": "Fed memangkas bunga setelah inflasi AS mereda",
+      "label": "global_monetary"
+    },
+    {
+      "text": "Bank sentral AS mempertahankan Fed funds rate",
+      "label": "global_monetary"
+    },
+    {
+      "text": "Dolar global menguat setelah imbal hasil Treasury naik",
+      "label": "global_monetary"
+    },
+    {
+      "text": "ECB European monetary policy and global funding costs",
+      "label": "global_monetary"
+    },
+    {
+      "text": "Global central banks ease monetary policy and liquidity",
+      "label": "global_monetary"
+    },
+    {
+      "text": "Bank Indonesia menaikkan BI Rate untuk menjaga rupiah",
+      "label": "domestic_monetary"
+    },
+    {
+      "text": "Suku bunga domestik dan biaya pendanaan kredit bank",
+      "label": "domestic_monetary"
+    },
+    {
+      "text": "Rupiah melemah terhadap dolar dan BI melakukan intervensi",
+      "label": "domestic_monetary"
+    },
+    {
+      "text": "Inflasi Indonesia mempersempit ruang pemangkasan bunga",
+      "label": "domestic_monetary"
+    },
+    {
+      "text": "BI mempertahankan suku bunga acuan dan stabilitas kurs",
+      "label": "domestic_monetary"
+    },
+    {
+      "text": "Kredit perbankan meningkat dengan biaya dana domestik",
+      "label": "domestic_monetary"
+    },
+    {
+      "text": "JISDOR dan cadangan devisa menunjukkan tekanan rupiah",
+      "label": "domestic_monetary"
+    },
+    {
+      "text": "Indonesia central bank policy transmission to credit",
+      "label": "domestic_monetary"
+    },
+    {
+      "text": "Mandat B50 dan realisasi serapan biodiesel sawit",
+      "label": "biodiesel"
+    },
+    {
+      "text": "Alokasi FAME ditambah untuk program B40",
+      "label": "biodiesel"
+    },
+    {
+      "text": "Harga CPO naik karena permintaan palm oil meningkat",
+      "label": "biodiesel"
+    },
+    {
+      "text": "Biodiesel blending requires verified implementation and funding",
+      "label": "biodiesel"
+    },
+    {
+      "text": "Pemerintah menunda implementasi B50 dan insentif FAME",
+      "label": "biodiesel"
+    },
+    {
+      "text": "Produksi kelapa sawit turun dan stok CPO menipis",
+      "label": "biodiesel"
+    },
+    {
+      "text": "Palm oil biodiesel feedstock and export levy spread",
+      "label": "biodiesel"
+    },
+    {
+      "text": "Serapan biodiesel belum mencapai target mandat",
+      "label": "biodiesel"
+    },
+    {
+      "text": "Investasi pusat data AI membutuhkan pasokan listrik",
+      "label": "ai_capex"
+    },
+    {
+      "text": "Kontrak pembangunan data center dan jaringan kabel tembaga",
+      "label": "ai_capex"
+    },
+    {
+      "text": "AI infrastructure capex raises grid and cooling demand",
+      "label": "ai_capex"
+    },
+    {
+      "text": "Backlog kabel listrik meningkat dari pembangunan pusat data",
+      "label": "ai_capex"
+    },
+    {
+      "text": "Proyek kecerdasan buatan butuh peralatan kelistrikan",
+      "label": "ai_capex"
+    },
+    {
+      "text": "Kontrak kapasitas data center belum terealisasi",
+      "label": "ai_capex"
+    },
+    {
+      "text": "Permintaan tembaga untuk infrastruktur AI naik",
+      "label": "ai_capex"
+    },
+    {
+      "text": "Capex pusat data dibatalkan akibat keterbatasan jaringan",
+      "label": "ai_capex"
+    },
+    {
+      "text": "Pertumbuhan ekonomi Indonesia dan konsumsi rumah tangga",
+      "label": "domestic_growth"
+    },
+    {
+      "text": "PDB domestik melambat ketika belanja masyarakat melemah",
+      "label": "domestic_growth"
+    },
+    {
+      "text": "Ekspor impor Indonesia membentuk neraca perdagangan",
+      "label": "domestic_growth"
+    },
+    {
+      "text": "APBN dan stimulus fiskal membantu permintaan domestik",
+      "label": "domestic_growth"
+    },
+    {
+      "text": "Indonesia household demand and domestic industrial activity",
+      "label": "domestic_growth"
+    },
+    {
+      "text": "PMI manufaktur Indonesia dan pertumbuhan investasi",
+      "label": "domestic_growth"
+    },
+    {
+      "text": "BPS melaporkan inflasi pangan dan daya beli masyarakat",
+      "label": "domestic_growth"
+    },
+    {
+      "text": "Penjualan ritel dan pertumbuhan pendapatan rumah tangga",
+      "label": "domestic_growth"
+    },
+    {
+      "text": "Direktur baru diangkat dalam rapat pemegang saham",
+      "label": "other"
+    },
+    {
+      "text": "Pengumuman pembagian dividen emiten dan jadwal cum date",
+      "label": "other"
+    },
+    {
+      "text": "Company changes its registered office address",
+      "label": "other"
+    },
+    {
+      "text": "Pemegang saham melaporkan perubahan kepemilikan internal",
+      "label": "other"
+    },
+    {
+      "text": "Hasil pertandingan sepak bola dan jadwal konser musik",
+      "label": "other"
+    },
+    {
+      "text": "Kegiatan sosial perusahaan di lingkungan kantor",
+      "label": "other"
+    },
+    {
+      "text": "Perseroan menerbitkan undangan RUPS tahunan",
+      "label": "other"
+    },
+    {
+      "text": "Cuaca hari ini cerah dan informasi layanan kantor",
+      "label": "other"
+    },
+    {
+      "text": "Wall Street menguat dipimpin indeks S&P 500 dan Nasdaq",
+      "label": "global_equities"
+    },
+    {
+      "text": "Dow Jones turun setelah aksi jual saham teknologi AS",
+      "label": "global_equities"
+    },
+    {
+      "text": "Bursa Asia Nikkei dan Hang Seng ditutup melemah",
+      "label": "global_equities"
+    },
+    {
+      "text": "KOSPI and Shanghai equity markets rally today",
+      "label": "global_equities"
+    },
+    {
+      "text": "Saham SpaceX dan Super Micro mengangkat Nasdaq",
+      "label": "global_equities"
+    },
+    {
+      "text": "Indeks DAX CAC40 dan FTSE bergerak naik",
+      "label": "global_equities"
+    },
+    {
+      "text": "Global equities risk appetite and stock index performance",
+      "label": "global_equities"
+    },
+    {
+      "text": "EIDO ETF dan IHSG bergerak berlawanan dengan Wall Street",
+      "label": "global_equities"
+    },
+    {
+      "text": "Harga emas melonjak saat permintaan safe haven naik",
+      "label": "commodities"
+    },
+    {
+      "text": "Nikel turun akibat surplus pasokan smelter",
+      "label": "commodities"
+    },
+    {
+      "text": "Copper metal demand and industrial commodity inventories",
+      "label": "commodities"
+    },
+    {
+      "text": "Harga batu bara thermal menguat tetapi coking coal berbeda",
+      "label": "commodities"
+    },
+    {
+      "text": "Persediaan aluminium dan timah mengubah harga logam",
+      "label": "commodities"
+    },
+    {
+      "text": "Harga perak naik sementara emas menguat",
+      "label": "commodities"
+    },
+    {
+      "text": "Gandum dan jagung tertekan oleh pemulihan pasokan pangan",
+      "label": "commodities"
+    },
+    {
+      "text": "Iron ore rubber zinc and agricultural commodity supply",
+      "label": "commodities"
+    }
+  ],
+  "validation": [
+    {
+      "text": "Apakah konsultasi MSCI dapat membawa RI menjadi pasar standalone?",
+      "label": "market_access"
+    },
+    {
+      "text": "MSCI membantah keputusan final downgrade Indonesia telah berlaku",
+      "label": "market_access"
+    },
+    {
+      "text": "Perbaikan free float belum menutup risiko reklasifikasi indeks",
+      "label": "market_access"
+    },
+    {
+      "text": "Pasokan minyak terganggu sehingga biaya bahan bakar berisiko melonjak",
+      "label": "energy"
+    },
+    {
+      "text": "WTI dan Brent terkoreksi saat stok minyak pulih",
+      "label": "energy"
+    },
+    {
+      "text": "Tarif tanker belum tentu naik hanya karena minyak menguat",
+      "label": "energy"
+    },
+    {
+      "text": "Federal Reserve menghadapi inflasi Amerika yang membandel",
+      "label": "global_monetary"
+    },
+    {
+      "text": "Kenaikan yield US Treasury menyerap likuiditas dunia",
+      "label": "global_monetary"
+    },
+    {
+      "text": "The Fed belum memutuskan memangkas bunga AS",
+      "label": "global_monetary"
+    },
+    {
+      "text": "Rupiah tertekan ketika Bank Indonesia mempertahankan suku bunga",
+      "label": "domestic_monetary"
+    },
+    {
+      "text": "Repricing bunga kredit mengikuti penurunan BI Rate",
+      "label": "domestic_monetary"
+    },
+    {
+      "text": "Bank Indonesia membantah rencana menaikkan suku bunga",
+      "label": "domestic_monetary"
+    },
+    {
+      "text": "Implementasi B50 belum menjamin tambahan serapan CPO",
+      "label": "biodiesel"
+    },
+    {
+      "text": "Kebutuhan bahan baku sawit bertambah melalui alokasi FAME",
+      "label": "biodiesel"
+    },
+    {
+      "text": "Pendanaan program biodiesel masih menunggu keputusan",
+      "label": "biodiesel"
+    },
+    {
+      "text": "Pembangunan pusat data AI mendorong kebutuhan kabel dan listrik",
+      "label": "ai_capex"
+    },
+    {
+      "text": "Utilisasi data center harus dibuktikan setelah capex diumumkan",
+      "label": "ai_capex"
+    },
+    {
+      "text": "Proyek infrastruktur AI ditunda karena koneksi grid terbatas",
+      "label": "ai_capex"
+    },
+    {
+      "text": "Konsumsi rumah tangga menahan perlambatan ekonomi Indonesia",
+      "label": "domestic_growth"
+    },
+    {
+      "text": "Data PDB Indonesia menunjukkan perubahan permintaan domestik",
+      "label": "domestic_growth"
+    },
+    {
+      "text": "Surplus neraca perdagangan Indonesia mengecil",
+      "label": "domestic_growth"
+    },
+    {
+      "text": "Perusahaan mengganti sekretaris dan alamat kantor pusat",
+      "label": "other"
+    },
+    {
+      "text": "RUPS menetapkan jadwal pembagian dividen tunai",
+      "label": "other"
+    },
+    {
+      "text": "Jadwal konser dan layanan transportasi akhir pekan",
+      "label": "other"
+    },
+    {
+      "text": "Reli Nasdaq didorong saham SpaceX dan Super Micro di Wall Street",
+      "label": "global_equities"
+    },
+    {
+      "text": "Dow Jones dan S&P 500 kompak melemah",
+      "label": "global_equities"
+    },
+    {
+      "text": "Bursa Jepang Nikkei menguat saat saham teknologi rebound",
+      "label": "global_equities"
+    },
+    {
+      "text": "Harga nikel tertekan karena persediaan logam naik",
+      "label": "commodities"
+    },
+    {
+      "text": "Permintaan tembaga menguat sementara inventory berkurang",
+      "label": "commodities"
+    },
+    {
+      "text": "Harga emas dan perak naik di pasar komoditas",
+      "label": "commodities"
+    }
+  ]
+}

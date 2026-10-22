@@ -117,7 +117,7 @@ def save_macro_context(cloud):
             'date':last['date'],'previous_date':previous['date'] if previous else None,'frequency':series['frequency'],'unit':series['unit'],
             'source_url':series['sourceUrl'],'retrieved_at':last.get('retrievedAt'),'availability_verified':False})
     if not items:return
-    prior=read(cloud,'sector_macro_context?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'payload','order':'generated_at.desc','limit':1}))
+    prior=read(cloud,'sector_macro_context?'+urlencode({'owner_id':'eq.'+cloud.owner,'payload->>kind':'is.null','select':'payload','order':'generated_at.desc','limit':1}))
     combined={r['id']:r for r in prior[0]['payload']['items']} if prior else {}
     for item in items:
         if item['id'] not in combined or item['date']>=combined[item['id']]['date']:combined[item['id']]=item
@@ -132,7 +132,7 @@ def save_macro_context(cloud):
     return dataset
 
 def macro_snapshot(cloud,now):
-    rows=read(cloud,'sector_macro_context?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'payload,generated_at','order':'generated_at.desc','limit':1}))
+    rows=read(cloud,'sector_macro_context?'+urlencode({'owner_id':'eq.'+cloud.owner,'payload->>kind':'is.null','select':'payload,generated_at','order':'generated_at.desc','limit':1}))
     if not rows:return {'items':[],'status':'unavailable','scope':'Angka makro resmi belum tersimpan. Berita tidak menggantikan data numerik.'}
     # Raw vintages live once in sector_macro_context, not every monitor run.
     result={k:v for k,v in rows[0]['payload'].items() if k!='intelligence_dataset'}
@@ -159,17 +159,15 @@ def run_monitor(cloud=None,refresh_news=True,force_train=False):
     cloud=cloud or SupabaseStore();started=datetime.now(timezone.utc);run=str(uuid.uuid4())
     try:
         news_result=sync_market_news(cloud,trigger='sector_monitor') if refresh_news else None
-        mapping=universe(cloud);model=latest_model(cloud)
-        trained_universe=set(model['audit'].get('universe_tickers',[t for s in model['audit']['sectors'].values() for t in s['tickers']]+model['audit']['excluded_stocks'])) if model else set()
-        universe_changed=set(mapping)!=trained_universe
-        due=not model or universe_changed or (started-instant(model['generated_at'])).days>=7
-        rows=load_prices(cloud,mapping,full=due or force_train)
-        if model and due and not universe_changed and not force_train and max((r['trade_date'] for r in rows),default='')<=model['audit']['end']:due=False
-        if due or force_train:
-            model=train_model(rows,mapping);save_model(cloud,model)
-            forecasts=model['current_predictions'];audit=model['audit']
-        else:
-            _,latest,audit=feature_panel(rows,mapping);forecasts=predict(model,latest)
+        mapping=universe(cloud)
+        # The old return-prediction model is an archive only. Rotation uses
+        # deterministic price validation and the one shared trained topic model.
+        rows=load_prices(cloud,mapping,full=False)
+        if not rows:raise CloudUnavailable('No stored prices for industry validation')
+        audit={'end':max(r['trade_date'] for r in rows)};forecasts=[]
+        if force_train:
+            from .macro_classifier import trained_classifier
+            trained_classifier.cache_clear();trained_classifier()
         macro_dataset=save_macro_context(cloud)
         now=datetime.now(timezone.utc)
         previous=read(cloud,'sector_opportunity_state?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'theme_id,payload,material_key,revision','limit':20}))
@@ -177,12 +175,15 @@ def run_monitor(cloud=None,refresh_news=True,force_train=False):
         # Legacy headline cards stay archived. Only the evidence-gated v2 engine
         # may publish new sector theses or notifications.
         from .sector_intelligence import run_intelligence
-        intelligence=run_intelligence(cloud,mapping,news,rows,now,dataset=macro_dataset)
+        from .shared_intelligence import refresh_shared_context,shared_snapshot
+        refresh_shared_context(cloud)
+        shared=shared_snapshot(cloud)['context']
+        intelligence=run_intelligence(cloud,mapping,news,rows,now,dataset=macro_dataset,shared_context=shared)
         outcome={'changed':intelligence['published'],'notifications_created':intelligence['notifications_created']}
-        context={'model_id':model['model_id'],'price_as_of':audit['end'],'predictions':forecasts,'macro':macro_snapshot(cloud,now),
+        context={'model_id':None,'active_model_id':shared['model']['training_hash'],'shared_analysis_id':shared['analysis_id'],'price_as_of':audit['end'],'predictions':forecasts,'macro':macro_snapshot(cloud,now),
             'news_context':topic_digest([a for a in news if approved_article(a)]),
             'news_count':len(news),'news_sync':news_result,'changes':outcome,'intelligence':intelligence,'research_only':True,
-            'scope':'Macro–industry intelligence dengan evidence gate. Probabilitas ML tetap eksperimen harga; belum ada validasi prediksi gabungan berita/makro.'}
+            'scope':'Satu model klasifikasi topik makro-sektoral dengan fakta primer dan price validation. Model prediksi harga lama hanya arsip; tidak dilatih atau dipakai untuk sinyal aktif.'}
         from .idx_calendar import session_dates,eligible_end
         local_now=now.astimezone(timezone(timedelta(hours=7)))
         eligible=session_dates((local_now.date()-timedelta(days=15)).isoformat(),eligible_end(local_now))
@@ -193,7 +194,7 @@ def run_monitor(cloud=None,refresh_news=True,force_train=False):
         cloud.request('sector_monitor_runs',[row])
         check=read(cloud,'sector_monitor_runs?'+urlencode({'owner_id':'eq.'+cloud.owner,'run_id':'eq.'+run,'select':'payload','limit':1}))
         if not check or check[0]['payload']!=context:raise CloudUnavailable('Monitor context readback mismatch')
-        return {'status':status,'database_verified':True,'run_id':run,'model_id':model['model_id'],**outcome,'price_as_of':audit['end']}
+        return {'status':status,'database_verified':True,'run_id':run,'model_id':shared['model']['training_hash'],**outcome,'price_as_of':audit['end']}
     except Exception:
         cloud.request('sector_monitor_runs',[{'owner_id':cloud.owner,'run_id':run,'generated_at':datetime.now(timezone.utc).isoformat(),'status':'failed',
             'payload':{'error':'Sector research update failed; prior verified results retained'}}])

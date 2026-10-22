@@ -1,0 +1,19 @@
+[
+  {
+    "id": "msci_indonesia_accessibility",
+    "source_url": "https://msci.gcs-web.com/news-releases/news-release-details/msci-launches-consultation-proposal-reclassify-indonesia",
+    "provider": "MSCI (official)",
+    "published_date": "2026-10-15",
+    "web_verified_at": "2026-10-22T15:00:27.700647+00:00",
+    "event_state": "consultation_proposal",
+    "decision_deadline": "2027-06-30",
+    "markers": [
+      "October 15, 2026",
+      "Standalone Market",
+      "June 30, 2027",
+      "consultation"
+    ],
+    "summary": "MSCI membuka konsultasi usulan reklasifikasi Indonesia dari Emerging Market ke Standalone Market pada 15 Oktober 2026. Keputusan akhir dijadwalkan paling lambat 30 Juni 2027. Freeze atas beberapa perubahan indeks tetap berlaku. Sorotan resmi mencakup transparansi kepemilikan dan fungsi pasar. Usulan ini belum sama dengan downgrade final yang sudah berlaku.",
+    "verification": "Primary announcement reviewed through web research; runtime collection records its own timestamp."
+  }
+]

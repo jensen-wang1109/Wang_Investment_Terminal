@@ -20,7 +20,7 @@ from .rights import ROOT
 
 from .sector_rotation import WEIGHTS, LABELS, industry_features, combine_factors, macro_factor, leading_factor
 
-VERSION = 'sector-macro-rotation-v3.0'
+VERSION = 'sector-macro-rotation-v3.1'
 DEFAULTS = {'weights': WEIGHTS, 'high':80,'developing':65,'watch':50,
     'minimum_data_quality':70,'minimum_metric_weight':65,'score_change':10,
     'cooldown_hours':72,'max_industries':3,'minimum_turnover_idr':1_000_000_000,
@@ -64,6 +64,8 @@ GRAPH = [
  dict(id='v2_energy',title='Energy supply shock',kind='Commodity / supply',keys=['brent','wti'],pattern=r'krisis energi|pasokan minyak|selat hormuz|harga minyak',
   chain=['Gangguan pasokan energi','Harga minyak / gas dan biaya input','ASP produsen vs biaya konsumen energi','Margin, volume dan revisi laba','Ekspektasi valuasi dan repricing'],
   winners=[edge('Upstream oil & gas',r'^Oil & Gas$',r'oil|gas|petroleum',1,'ASP naik dapat meningkatkan laba jika produksi dan biaya stabil.','Produksi, realised ASP, lifting cost, hedging dan porsi hulu'),
+   edge('Oilfield services',r'^Oil, Gas & Coal Supports$',r'drilling|oil|gas',2,'Capex hulu dapat menambah order jasa; harga minyak saja tidak menjamin kontrak.','Kontrak drilling, utilisasi peralatan, capex dan lag realisasi'),
+   edge('Oil tankers',r'^Oil & Gas Transportation \(Tanker\)$',r'tanker|shipping',2,'Potensi manfaat dari ton-mile, tarif charter dan utilisasi; bunker mahal dapat menekan margin.','Tarif tanker, charter mix, ton-mile, bunker dan keamanan rute'),
    edge('Thermal coal',r'^Coal$',r'coal|mining',2,'Substitusi gas ke batu bara dapat mendukung margin; bukan coking coal.','Jenis batu bara, DMO, kontrak, volume dan biaya')],
   losers=[{'industry':'Air transportation','mechanism':'Fuel naik menekan margin jika tarif, subsidi atau hedging tidak menutup biaya.'},
    {'industry':'Energy-intensive manufacturing','mechanism':'Energi dan feedstock lebih mahal; uji pricing power dan pasokan kontraktual.'}],
@@ -377,7 +379,7 @@ def publication_decision(session,previous,now,cfg):
     if elapsed<cfg['cooldown_hours'] and not urgent:return None
     return 'contrary_evidence_or_gate_lost' if old['status']=='High Conviction' and not strong else 'material_conviction_change'
 
-def run_intelligence(cloud,mapping,news,prices,now=None,dataset=None):
+def run_intelligence(cloud,mapping,news,prices,now=None,dataset=None,shared_context=None):
     now=now or datetime.now(timezone.utc)
     macro_file=ROOT/'public/data/macro-history.json'
     # Remote jobs with a failed download still use the last verified cloud input.
@@ -392,6 +394,13 @@ def run_intelligence(cloud,mapping,news,prices,now=None,dataset=None):
     benchmark=benchmark_history(cloud)
     assertions=read(cloud,'sector_evidence_assertions?'+urlencode({'owner_id':'eq.'+cloud.owner,'select':'payload','limit':1000}))
     result=evaluate(dataset,news,mapping,{},prices,[a['payload'] for a in assertions],prior,now,benchmark=benchmark)
+    if shared_context:
+        result['shared_analysis_id']=shared_context['analysis_id']
+        systemic=[s for s in shared_context.get('signals',[]) if s['id']=='market_access']
+        for session in result['sessions']:
+            session['shared_analysis_id']=shared_context['analysis_id']
+            session['systemic_context']=[{'title':s['title'],'state':s['state'],'impact':s['macro'],'source':(s.get('fact') or {}).get('source_url')} for s in systemic]
+            session['checks']+=['Uji risiko arus modal dan likuiditas Indonesia dari konteks makro bersama; potensi manfaat laba tidak meniadakan risiko pasar.'] if systemic else []
     validation_file=ROOT/'.private/sector-model/rotation-validation.json'
     validation=json.loads(validation_file.read_text(encoding='utf8')) if validation_file.exists() else prior.get('technical_backtest')
     if validation and validation.get('weights')==result['config']['weights']:result['technical_backtest']=validation

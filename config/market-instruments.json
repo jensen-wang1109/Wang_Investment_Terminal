@@ -1,0 +1,402 @@
+[
+  {
+    "id": "market_ihsg",
+    "label": "IHSG",
+    "symbol": "^JKSE",
+    "kind": "INDEX",
+    "currency": "IDR",
+    "unit": "Index Points",
+    "timezone": "Asia/Jakarta",
+    "category": "global"
+  },
+  {
+    "id": "market_sp500",
+    "label": "S&P 500",
+    "symbol": "^GSPC",
+    "kind": "INDEX",
+    "currency": "USD",
+    "unit": "Index Points",
+    "timezone": "America/New_York",
+    "category": "global"
+  },
+  {
+    "id": "market_dow30",
+    "label": "Dow 30",
+    "symbol": "^DJI",
+    "kind": "INDEX",
+    "currency": "USD",
+    "unit": "Index Points",
+    "timezone": "America/New_York",
+    "category": "global"
+  },
+  {
+    "id": "market_hangseng",
+    "label": "Hang Seng",
+    "symbol": "^HSI",
+    "kind": "INDEX",
+    "currency": "HKD",
+    "unit": "Index Points",
+    "timezone": "Asia/Hong_Kong",
+    "category": "global"
+  },
+  {
+    "id": "market_nikkei",
+    "label": "Nikkei 225",
+    "symbol": "^N225",
+    "kind": "INDEX",
+    "currency": "JPY",
+    "unit": "Index Points",
+    "timezone": "Asia/Tokyo",
+    "category": "global"
+  },
+  {
+    "id": "market_kospi",
+    "label": "KOSPI",
+    "symbol": "^KS11",
+    "kind": "INDEX",
+    "currency": "KRW",
+    "unit": "Index Points",
+    "timezone": "Asia/Seoul",
+    "category": "global"
+  },
+  {
+    "id": "market_shanghai",
+    "label": "Shanghai Composite",
+    "symbol": "000001.SS",
+    "kind": "INDEX",
+    "currency": "CNY",
+    "unit": "Index Points",
+    "timezone": "Asia/Shanghai",
+    "category": "global"
+  },
+  {
+    "id": "market_cac40",
+    "label": "CAC 40",
+    "symbol": "^FCHI",
+    "kind": "INDEX",
+    "currency": "EUR",
+    "unit": "Index Points",
+    "timezone": "Europe/Paris",
+    "category": "global"
+  },
+  {
+    "id": "market_dax",
+    "label": "DAX",
+    "symbol": "^GDAXI",
+    "kind": "INDEX",
+    "currency": "EUR",
+    "unit": "Index Points",
+    "timezone": "Europe/Berlin",
+    "category": "global"
+  },
+  {
+    "id": "market_ftse",
+    "label": "FTSE 100",
+    "symbol": "^FTSE",
+    "kind": "INDEX",
+    "currency": "GBP",
+    "unit": "Index Points",
+    "timezone": "Europe/London",
+    "category": "global"
+  },
+  {
+    "id": "market_eido",
+    "label": "iShares MSCI Indonesia ETF",
+    "symbol": "EIDO",
+    "kind": "ETF",
+    "currency": "USD",
+    "unit": "USD/share",
+    "timezone": "America/New_York",
+    "category": "global"
+  },
+  {
+    "id": "market_gold",
+    "label": "Gold",
+    "symbol": "GC=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/t.oz",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "gold"
+  },
+  {
+    "id": "market_silver",
+    "label": "Silver",
+    "symbol": "SI=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/t.oz",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "silver"
+  },
+  {
+    "id": "market_copper",
+    "label": "Copper",
+    "symbol": "HG=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/Lbs",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "copper"
+  },
+  {
+    "id": "market_platinum",
+    "label": "Platinum",
+    "symbol": "PL=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/t.oz",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "platinum"
+  },
+  {
+    "id": "market_palladium",
+    "label": "Palladium",
+    "symbol": "PA=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/t.oz",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "palladium"
+  },
+  {
+    "id": "market_wti",
+    "label": "Crude Oil",
+    "symbol": "CL=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/Bbl",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "crude_oil"
+  },
+  {
+    "id": "market_brent",
+    "label": "Brent",
+    "symbol": "BZ=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/Bbl",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "brent_crude_oil"
+  },
+  {
+    "id": "market_natural_gas",
+    "label": "Natural gas",
+    "symbol": "NG=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/MMBtu",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "natural_gas"
+  },
+  {
+    "id": "market_gasoline",
+    "label": "Gasoline",
+    "symbol": "RB=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/Gal",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "gasoline_rbob"
+  },
+  {
+    "id": "market_heating_oil",
+    "label": "Heating Oil",
+    "symbol": "HO=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/Gal",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "heating_oil"
+  },
+  {
+    "id": "market_soybeans",
+    "label": "Soybeans",
+    "symbol": "ZS=F",
+    "kind": "FUTURE",
+    "currency": "USX",
+    "unit": "USd/Bu",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "soybean"
+  },
+  {
+    "id": "market_wheat",
+    "label": "Wheat",
+    "symbol": "ZW=F",
+    "kind": "FUTURE",
+    "currency": "USX",
+    "unit": "USd/Bu",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "wheat"
+  },
+  {
+    "id": "market_corn",
+    "label": "Corn",
+    "symbol": "ZC=F",
+    "kind": "FUTURE",
+    "currency": "USX",
+    "unit": "USd/Bu",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "corn"
+  },
+  {
+    "id": "market_oat",
+    "label": "Oat",
+    "symbol": "ZO=F",
+    "kind": "FUTURE",
+    "currency": "USX",
+    "unit": "USd/Bu",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "oat"
+  },
+  {
+    "id": "market_rice",
+    "label": "Rice",
+    "symbol": "ZR=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/cwt",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "rough_rice"
+  },
+  {
+    "id": "market_coffee",
+    "label": "Coffee",
+    "symbol": "KC=F",
+    "kind": "FUTURE",
+    "currency": "USX",
+    "unit": "USd/Lbs",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "coffee"
+  },
+  {
+    "id": "market_cotton",
+    "label": "Cotton",
+    "symbol": "CT=F",
+    "kind": "FUTURE",
+    "currency": "USX",
+    "unit": "USd/Lbs",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "cotton",
+    "source_kinds": [
+      "FUTURE",
+      "ALTSYMBOL"
+    ]
+  },
+  {
+    "id": "market_cocoa",
+    "label": "Cocoa",
+    "symbol": "CC=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/T",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "cocoa"
+  },
+  {
+    "id": "market_sugar",
+    "label": "Sugar",
+    "symbol": "SB=F",
+    "kind": "FUTURE",
+    "currency": "USX",
+    "unit": "USd/Lbs",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "sugar"
+  },
+  {
+    "id": "market_orange_juice",
+    "label": "Orange Juice",
+    "symbol": "OJ=F",
+    "kind": "FUTURE",
+    "currency": "USX",
+    "unit": "USd/Lbs",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "orange_juice"
+  },
+  {
+    "id": "market_lumber",
+    "label": "Lumber",
+    "symbol": "LBR=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/1000 board feet",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "lumber"
+  },
+  {
+    "id": "market_milk",
+    "label": "Milk",
+    "symbol": "DC=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/CWT",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "class_3_milk"
+  },
+  {
+    "id": "market_lean_hogs",
+    "label": "Lean Hogs",
+    "symbol": "HE=F",
+    "kind": "FUTURE",
+    "currency": "USX",
+    "unit": "USd/Lbs",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "lean_hogs"
+  },
+  {
+    "id": "market_live_cattle",
+    "label": "Live Cattle",
+    "symbol": "LE=F",
+    "kind": "FUTURE",
+    "currency": "USX",
+    "unit": "USd/Lbs",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "live_cattle"
+  },
+  {
+    "id": "market_feeder_cattle",
+    "label": "Feeder Cattle",
+    "symbol": "GF=F",
+    "kind": "FUTURE",
+    "currency": "USX",
+    "unit": "USd/Lbs",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "feeder_cattle"
+  },
+  {
+    "id": "market_aluminum",
+    "label": "Aluminum",
+    "symbol": "ALI=F",
+    "kind": "FUTURE",
+    "currency": "USD",
+    "unit": "USD/T",
+    "timezone": "America/New_York",
+    "category": "commodity",
+    "ninjas": "aluminum"
+  }
+]
