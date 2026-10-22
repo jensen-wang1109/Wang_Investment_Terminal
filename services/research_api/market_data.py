@@ -26,7 +26,7 @@ def last_completed_day(meta,now):
     # No today's bar unless the source explicitly places the regular close in the past.
     end=meta.get('currentTradingPeriod',{}).get('regular',{}).get('end')
     close=end.astimezone(timezone.utc) if isinstance(end,datetime) and end.tzinfo else datetime.fromtimestamp(end,timezone.utc) if isinstance(end,(int,float)) else None
-    closed=bool(close and close+timedelta(minutes=30)<=now)
+    closed=bool(close and close.astimezone(local.tzinfo).date()==local.date() and close+timedelta(minutes=30)<=now)
     return (local.date() if closed else local.date()-timedelta(days=1)).isoformat()
 
 def normalize_history(item,frame,meta,now):

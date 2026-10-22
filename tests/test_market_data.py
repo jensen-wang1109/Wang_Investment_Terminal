@@ -21,6 +21,9 @@ class MarketDataTests(unittest.TestCase):
  def test_intraday_bar_rejected(self):
   frame=self.frame();frame.index=pd.to_datetime(['2026-10-22'])
   with self.assertRaisesRegex(ValueError,'completed'):normalize_history(instrument('^GSPC'),frame,self.metadata(),NOW)
+ def test_stale_previous_close_does_not_finalize_todays_session(self):
+  meta=self.metadata();meta['currentTradingPeriod']['regular']['end']=pd.Timestamp('2026-10-21T16:00:00-04:00')
+  self.assertEqual(last_completed_day(meta,NOW),'2026-10-21')
  def test_invalid_ohlc_and_duplicate_sessions_rejected(self):
   frame=self.frame();frame.loc[:,'High']=99.
   with self.assertRaisesRegex(ValueError,'valid completed'):normalize_history(instrument('^GSPC'),frame,self.metadata(),NOW)
