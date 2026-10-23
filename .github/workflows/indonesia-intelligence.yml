@@ -1,7 +1,6 @@
+# Cloud schedule paused for local MariaDB cutover. Manual dispatch retained for explicit rollback.
 name: Daily Indonesia Macro and Sector Intelligence
 on:
-  schedule:
-    - cron: '0 12 * * *' # 19:00 Asia/Jakarta every day; 20:00 Perth.
   workflow_dispatch:
 permissions:
   contents: read

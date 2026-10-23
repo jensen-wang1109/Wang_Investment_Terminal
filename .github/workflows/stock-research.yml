@@ -1,8 +1,6 @@
+# Cloud schedule paused for local MariaDB cutover. Manual dispatch retained for explicit rollback.
 name: Yahoo Research Accuracy
 on:
-  schedule:
-    - cron: '0 11 * * 1-5' # 18:00 WIB: authoritative Current Price/Book.
-    - cron: '0 1 * * 6' # Saturday 08:00 WIB: actual annual/quarterly financials.
   workflow_dispatch:
     inputs:
       financials:

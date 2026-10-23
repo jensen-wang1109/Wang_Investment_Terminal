@@ -1,7 +1,6 @@
+# Cloud schedule paused for local MariaDB cutover. Manual dispatch retained for explicit rollback.
 name: IDX Daily EOD
 on:
-  schedule:
-    - cron: '0 10 * * 1-5' # 17:00 Asia/Jakarta; GitHub may delay scheduled jobs.
   workflow_dispatch:
     inputs:
       backfill:

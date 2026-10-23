@@ -1,8 +1,6 @@
+# Cloud schedule paused for local MariaDB cutover. Manual dispatch retained for explicit rollback.
 name: Global Markets and Commodity EOD
 on:
-  schedule:
-    - cron: '0 0 * * 1-6' # 07:00 WIB / 08:00 Perth; US close already passed.
-    - cron: '15 10 * * 1-5' # 17:15 WIB / 18:15 Perth; Asian market close.
   workflow_dispatch:
 permissions:
   contents: read
