@@ -1,11 +1,10 @@
 {
   "weights": {
-    "macro": 25,
-    "leading": 20,
-    "relative": 20,
-    "momentum": 15,
-    "breadth": 10,
-    "risk": 10
+    "macro": 30,
+    "industry": 25,
+    "price": 20,
+    "catalyst": 15,
+    "evidence": 10
   },
   "high": 80,
   "developing": 65,

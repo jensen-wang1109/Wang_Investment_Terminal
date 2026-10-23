@@ -5,6 +5,9 @@ from html import escape
 from datetime import datetime, timedelta, timezone
 
 def render_brief(report):
+    if report.get('brief'):
+        from .indonesia_brief_pdf import render_indonesia_brief
+        return render_indonesia_brief(report)
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.colors import HexColor

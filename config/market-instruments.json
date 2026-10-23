@@ -475,5 +475,15 @@
       ]
     ],
     "basis": "Kurs silang: USD/IDR \u00f7 USD/CNY; tanggal sama, tanpa forward-fill."
+  },
+  {
+    "id": "market_dxy",
+    "label": "US Dollar Index (DXY)",
+    "symbol": "DX-Y.NYB",
+    "kind": "INDEX",
+    "currency": "USD",
+    "unit": "index",
+    "timezone": "America/New_York",
+    "category": "macro"
   }
 ]

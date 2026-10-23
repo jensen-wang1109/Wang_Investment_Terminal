@@ -155,7 +155,7 @@ def macro_snapshot(cloud,now):
             interpretations.append({'title':title,'summary':prefix+mechanism,'source_url':item['source_url']})
     return {**result,'status':'available','generated_at':rows[0]['generated_at'],'interpretations':interpretations}
 
-def run_monitor(cloud=None,refresh_news=True,force_train=False):
+def run_monitor(cloud=None,refresh_news=True,force_train=False,shared_context=None):
     cloud=cloud or SupabaseStore();started=datetime.now(timezone.utc);run=str(uuid.uuid4())
     try:
         news_result=sync_market_news(cloud,trigger='sector_monitor') if refresh_news else None
@@ -176,8 +176,8 @@ def run_monitor(cloud=None,refresh_news=True,force_train=False):
         # may publish new sector theses or notifications.
         from .sector_intelligence import run_intelligence
         from .shared_intelligence import refresh_shared_context,shared_snapshot
-        refresh_shared_context(cloud)
-        shared=shared_snapshot(cloud)['context']
+        if shared_context is None:refresh_shared_context(cloud)
+        shared=shared_context or shared_snapshot(cloud)['context']
         intelligence=run_intelligence(cloud,mapping,news,rows,now,dataset=macro_dataset,shared_context=shared)
         outcome={'changed':intelligence['published'],'notifications_created':intelligence['notifications_created']}
         context={'model_id':None,'active_model_id':shared['model']['training_hash'],'shared_analysis_id':shared['analysis_id'],'price_as_of':audit['end'],'predictions':forecasts,'macro':macro_snapshot(cloud,now),
@@ -194,7 +194,7 @@ def run_monitor(cloud=None,refresh_news=True,force_train=False):
         cloud.request('sector_monitor_runs',[row])
         check=read(cloud,'sector_monitor_runs?'+urlencode({'owner_id':'eq.'+cloud.owner,'run_id':'eq.'+run,'select':'payload','limit':1}))
         if not check or check[0]['payload']!=context:raise CloudUnavailable('Monitor context readback mismatch')
-        return {'status':status,'database_verified':True,'run_id':run,'model_id':shared['model']['training_hash'],**outcome,'price_as_of':audit['end']}
+        return {'status':status,'database_verified':True,'run_id':run,'model_id':shared['model']['training_hash'],**outcome,'price_as_of':audit['end'],'watchlist_participation':intelligence.get('watchlist_participation')}
     except Exception:
         cloud.request('sector_monitor_runs',[{'owner_id':cloud.owner,'run_id':run,'generated_at':datetime.now(timezone.utc).isoformat(),'status':'failed',
             'payload':{'error':'Sector research update failed; prior verified results retained'}}])
@@ -211,7 +211,7 @@ def sector_snapshot(cloud=None):
     if model:model={k:v for k,v in model.items() if k!='current_predictions'};model['models']=[{k:v for k,v in m.items() if k!='parameters'} for m in model['models']]
     from .sector_intelligence import intelligence_snapshot
     return {'opportunities':states,'intelligence':intelligence_snapshot(cloud),'monitor':latest,'last_attempt':runs[0] if runs else None,'model':model,
-        'schedule':'Pantau 07:30, 10:30, 13:30, 16:30 dan 19:30 WIB; publikasi/notifikasi hanya saat tesis berubah material.'}
+        'schedule':'Evaluasi bersama laporan harian 19:00 WIB; publikasi/notifikasi sektor hanya saat tesis berubah material.'}
 
 def notification_snapshot(cloud=None):
     cloud=cloud or SupabaseStore()

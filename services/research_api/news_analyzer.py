@@ -143,6 +143,9 @@ def collect_inputs(cloud,cutoff,knowledge_cutoff=None):
     raise CloudUnavailable('News analysis input limit exceeded; report not replaced')
 
 def generate_daily_analysis(cloud=None,cutoff=None,session='manual'):
+    if cutoff is None:
+        from .daily_intelligence import daily_report
+        return daily_report(cloud,force=False)
     cloud=cloud or SupabaseStore();actual=datetime.now(timezone.utc);explicit=cutoff is not None
     if cutoff is None:
         local=actual.astimezone(JAKARTA)
@@ -199,4 +202,4 @@ def analysis_snapshot(cloud=None,day=None,report_id=None):
     logs=read(cloud,'ingestion_runs?'+urlencode({'owner_id':'eq.'+cloud.owner,'series_id':'eq.analysis.daily','select':'status,finished_at,error_code','order':'finished_at.desc','limit':1}))
     news_logs=read(cloud,'ingestion_runs?'+urlencode({'owner_id':'eq.'+cloud.owner,'series_id':'eq.news.market','select':'status,finished_at,error_code','order':'finished_at.desc','limit':1}))
     return {'report':rows[0]['report'] if rows else None,'history':[{'date':d,'generated_at':v} for d,v in days.items()],'versions':history,
-            'last_attempt':logs[0] if logs else None,'news_sync':news_logs[0] if news_logs else None,'schedule':SCHEDULE,'cloud_persisted':True}
+            'last_attempt':logs[0] if logs else None,'news_sync':news_logs[0] if news_logs else None,'schedule':{'time':'19:00','timezone':'Asia/Jakarta','frequency':'daily','weekends':'short report using latest valid observations'},'cloud_persisted':True}

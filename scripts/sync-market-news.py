@@ -19,7 +19,7 @@ if __name__=='__main__':
                     print(json.dumps({'status':'skipped','reason':'IDX exchange holiday; morning brief remains scheduled daily'}));raise SystemExit(0)
         result=sync_market_news(trigger=os.environ.get('GITHUB_EVENT_NAME','manual'))
         print(json.dumps(result),flush=True)
-        if result['database_verified']:
+        if result['database_verified'] and '--collect-only' not in sys.argv:
             analysis=generate_daily_analysis(session=session)
             print(json.dumps({'analyzer':analysis}),flush=True)
         raise SystemExit(0 if result['status'] in ('success','partial') and result['database_verified'] else 2)

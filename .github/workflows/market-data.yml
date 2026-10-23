@@ -28,6 +28,6 @@ jobs:
         run: python -m unittest tests.test_market_data tests.test_shared_intelligence -v
       - name: Collect completed sessions and commodity snapshots; verify database writes
         run: python scripts/refresh-market-data.py
-      - name: Refresh the one shared macro-sector context
+      - name: Refresh daily Treasury / broad dollar and Indonesia SBN yields
         if: always()
-        run: python scripts/refresh-shared-intelligence.py
+        run: python scripts/refresh-macro-rates.py

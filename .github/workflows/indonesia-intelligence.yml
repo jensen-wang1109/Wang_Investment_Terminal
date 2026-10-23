@@ -1,0 +1,38 @@
+name: Daily Indonesia Macro and Sector Intelligence
+on:
+  schedule:
+    - cron: '0 12 * * *' # 19:00 Asia/Jakarta every day; 20:00 Perth.
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: indonesia-daily-intelligence
+  cancel-in-progress: false
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      WANG_SUPABASE_OWNER_ID: ${{ secrets.WANG_SUPABASE_OWNER_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r services/research_api/requirements-sector.txt openpyxl==3.1.5
+      - name: Test temporal gates, state persistence, materiality and failed-write protection
+        run: python -m unittest tests.test_indonesia_intelligence tests.test_macro_rates tests.test_sector_intelligence tests.test_shared_intelligence -v
+      - name: Refresh official macro releases without discarding prior sources
+        continue-on-error: true
+        timeout-minutes: 4
+        run: python scripts/fetch-macro.py
+      - name: Refresh daily Treasury, broad dollar and SBN yields with database readback
+        continue-on-error: true
+        run: python scripts/refresh-macro-rates.py
+      - name: Collect Indonesia market headlines; no separate news-based report
+        continue-on-error: true
+        run: python scripts/sync-market-news.py --collect-only
+      - name: Build one shared daily report and evaluate selective industry theses
+        run: python scripts/run-indonesia-intelligence.py

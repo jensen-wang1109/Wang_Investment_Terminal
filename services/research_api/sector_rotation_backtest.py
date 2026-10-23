@@ -22,9 +22,9 @@ def validate_prices(prices,mapping,benchmark,cfg,round_trip_cost=.005):
             past=[r for r in groups[industry] if r['trade_date']<=day]
             features=industry_features(past,symbols,past_b,now,cfg)
             if features['coverage_confidence']['confidence']<cfg['minimum_data_quality']:continue
-            values=features['values'];weight=sum(cfg['weights'][k] for k,v in values.items() if v is not None)
+            values=features['values'];weight=sum(WEIGHTS[k] for k,v in values.items() if v is not None)
             if not weight or features['market'] is None:continue
-            score=sum(v*cfg['weights'][k] for k,v in values.items() if v is not None)/weight
+            score=sum(v*WEIGHTS[k] for k,v in values.items() if v is not None)/weight
             chosen=score>=65 and not features['market']['overextended']
             for horizon in (21,63,126):
                 if index+horizon>=len(calendar):continue
@@ -43,7 +43,7 @@ def validate_prices(prices,mapping,benchmark,cfg,round_trip_cost=.005):
             'positive_excess_rate_pct':round(sum(r['excess']>0 for r in rows)/len(rows)*100,2) if rows else None}
     return {'version':'rotation-technical-diagnostic-v1','generated_at':datetime.now(timezone.utc).isoformat(),
         'status':'technical_only_not_combined_macro_validation','benchmark':'^JKSE',
-        'weights':cfg['weights'],'technical_weight':sum(cfg['weights'][k] for k in ('relative','momentum','breadth','risk')),
+        'weights':WEIGHTS,'technical_weight':sum(WEIGHTS[k] for k in ('relative','momentum','breadth','risk')),
         'round_trip_cost_assumption_pct':round_trip_cost*100,'selection_rule':'technical score >=65 and not overextended; fixed before this diagnostic',
         'range':[calendar[0],calendar[-1]] if calendar else [],'excluded_single_stock_industries':skipped_single,
         'horizons':{str(h):{'all_eligible':summary(outcomes[h]),'technical_shortlist':summary(selected[h])} for h in (21,63,126)},

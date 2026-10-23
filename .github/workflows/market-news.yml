@@ -26,5 +26,5 @@ jobs:
       - run: python -m pip install -r services/research_api/requirements-sector.txt -r services/research_api/requirements-reporting.txt pypdf==6.21.1
       - name: Verify analyzer rules and failed-write preservation
         run: python -m unittest tests.test_news_analyzer tests.test_analyzer_pdf -v
-      - name: Collect headlines, generate daily analysis and verify Supabase readback
-        run: python scripts/sync-market-news.py
+      - name: Collect headlines and verify Supabase readback; daily report owned by unified workflow
+        run: python scripts/sync-market-news.py --collect-only

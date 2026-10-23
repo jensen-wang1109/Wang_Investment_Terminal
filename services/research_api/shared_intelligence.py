@@ -14,7 +14,7 @@ from .network import secure_open
 from .news_analyzer import instant
 from .macro_classifier import classify_texts
 
-VERSION='shared-macro-sector-v1'
+VERSION='shared-macro-sector-v2'
 _job={'status':'idle'};_lock=threading.Lock()
 LABELS={'global_equities':'Sentimen bursa global','commodities':'Komoditas & aktivitas industri','market_access':'Aksesibilitas & arus modal Indonesia','energy':'Energi & rantai pasok','global_monetary':'Kebijakan moneter global','domestic_monetary':'Moneter domestik & rupiah','biodiesel':'Sawit & kebijakan biodiesel','ai_capex':'AI, listrik & capex','domestic_growth':'Pertumbuhan & permintaan Indonesia'}
 
@@ -97,18 +97,24 @@ def news_rows(cloud,now,knowledge=None):
 def price_context(cloud,now,cutoff=None):
     from .market_data import market_history
     result=[]
-    for symbol in ['^JKSE','^GSPC','^DJI','EIDO','CL=F','BZ=F','GC=F','HG=F','ZW=F']:
+    for symbol in ['^JKSE','^GSPC','^DJI','EIDO','CL=F','BZ=F','GC=F','HG=F','ZW=F','IDR=X','DX-Y.NYB']:
         try:
             from .market_data import instrument
             from zoneinfo import ZoneInfo
             local=(cutoff or now).astimezone(ZoneInfo(instrument(symbol)['timezone']))
             close_time={'^JKSE':(16,45),'^GSPC':(16,30),'^DJI':(16,30),'EIDO':(16,30)}.get(symbol,(18,0))
             eligible=(local.date() if (local.hour,local.minute)>=close_time else local.date()-timedelta(days=1)).isoformat()
+            if symbol=='^JKSE':
+                from .idx_calendar import session_dates,eligible_end
+                local_idx=(cutoff or now).astimezone(timezone(timedelta(hours=7)))
+                sessions=session_dates((local_idx.date()-timedelta(days=15)).isoformat(),eligible_end(local_idx))
+                eligible=sessions[-1] if sessions else eligible
             data=market_history(cloud,symbol);bars=[p for p in data['rows'] if instant(p['retrieved_at'])<=now and p['date']<=eligible]
             if not bars:continue
             last=bars[-1];previous=bars[-22] if len(bars)>21 else None
+            from .indonesia_intelligence import market_features
             result.append({'symbol':symbol,'name':data['instrument']['label'],'value':last['value'],'unit':data['instrument']['unit'],'observation_date':last['date'],
-                           'return_21':last['value']/previous['value']-1 if previous and previous['value']>0 else None,'source_url':data['instrument']['source_url'],'known_at':last['retrieved_at']})
+                           'return_21':last['value']/previous['value']-1 if previous and previous['value']>0 else None,'source_url':data['instrument']['source_url'],'known_at':last['retrieved_at'],'features':market_features(bars,now,expected=eligible if symbol=='^JKSE' else None)})
         except CloudUnavailable:continue
     return result
 
@@ -161,6 +167,13 @@ def refresh_shared_context(cloud=None,publication_cutoff=None):
         macro['items']=[i for i in macro.get('items',[]) if instant(i.get('retrieved_at')) and instant(i['retrieved_at'])<=cutoff]
         macro['interpretations']=[] # Do not retain prose derived from filtered future vintages.
     result=build_context(news,facts,prices,macro,model,classified,now)
+    from .indonesia_intelligence import build_indonesia
+    from .sector_intelligence import macro_analytics
+    snapshots=read(cloud,'sector_macro_context?'+urlencode({'owner_id':'eq.'+cloud.owner,'payload->>kind':'is.null','select':'payload','order':'generated_at.desc','limit':1}))
+    dataset=snapshots[0]['payload'].get('intelligence_dataset',{}) if snapshots else {}
+    prior=read(cloud,'daily_market_analysis?'+urlencode({'owner_id':'eq.'+cloud.owner,'report_date':'lt.'+cutoff.astimezone(timezone(timedelta(hours=7))).date().isoformat(),'select':'report','order':'report_date.desc,generated_at.desc','limit':1}))
+    previous=prior[0]['report'].get('brief',{}) if prior else {}
+    result['indonesia']=build_indonesia(result,macro_analytics(dataset,cutoff if publication_cutoff else now),previous,now)
     result['publication_cutoff']=cutoff.isoformat()
     result['analysis_id']=hashlib.sha256(json.dumps({k:v for k,v in result.items() if k!='analysis_id'},sort_keys=True,ensure_ascii=False,allow_nan=False).encode()).hexdigest()
     payload={'kind':'unified_intelligence','items':[],'context':result}

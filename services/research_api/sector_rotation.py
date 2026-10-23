@@ -64,7 +64,7 @@ def stock_features(rows,benchmark,now,cfg):
     reversal=bool(moving[20] is not None and moving[50] is not None and last_price<moving[20]<moving[50])
     risk=clamp(100-(vol*70+abs(drawdown)*70+(20 if reversal else 0))) if vol is not None else None
     turnovers=[r['close']*r['volume'] for r in rows if r.get('trade_date') in set(window[-21:]) and number(r.get('close')) and number(r.get('volume')) and r['volume']>=0]
-    return {'date':last,'observations':len(values),'history_completeness':sum(d in p for d in window)/len(window),
+    return {'date':last,'last_price':last_price,'observations':len(values),'history_completeness':sum(d in p for d in window)/len(window),
         'returns':returns,'relative':relative,'ma':moving,'momentum':momentum,'acceleration':accelerating,
         'breakout':breakout,'overextended':extended,'distance_ma50':distance,'volatility':vol,
         'max_drawdown':drawdown,'reversal':reversal,'risk':risk,

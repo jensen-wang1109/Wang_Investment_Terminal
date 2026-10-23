@@ -1,8 +1,6 @@
 name: Sector Trend Research Monitor
 on:
-  schedule:
-    - cron: '30 0 * * *' # 07:30 WIB, also refresh official macro context.
-    - cron: '30 3,6,9,12 * * *' # 10:30 / 13:30 / 16:30 / 19:30 WIB.
+  # Daily evaluation is owned by indonesia-intelligence.yml; manual reassessment remains available.
   workflow_dispatch:
 permissions:
   contents: read

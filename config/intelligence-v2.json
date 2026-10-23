@@ -1,0 +1,29 @@
+{
+  "version": "indonesia-first-v2.0",
+  "publication_hour_jakarta": 19,
+  "outlook_weeks": [
+    1,
+    4
+  ],
+  "regime_persistence_days": 2,
+  "market_stale_calendar_days": 4,
+  "material_change_pct": {
+    "^JKSE": 1,
+    "IDR=X": 0.5,
+    "CL=F": 3,
+    "BZ=F": 3,
+    "DX-Y.NYB": 1
+  },
+  "retention": {
+    "raw_cache_days": 14,
+    "detailed_reports_days": 90,
+    "operational_logs_days": 30
+  },
+  "project_database_limit_bytes": 500000000,
+  "database_limit_status": "Verified in actual project billing dashboard 2026-10-23: Free plan, 500 MB database quota. Provisioned disk and the conservative 350 MB working budget are separate limits; reverify after plan changes.",
+  "prediction_horizons_sessions": [
+    21,
+    63,
+    126
+  ]
+}
