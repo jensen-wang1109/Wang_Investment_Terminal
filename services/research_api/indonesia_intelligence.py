@@ -158,14 +158,17 @@ def build_indonesia(context,indicators,previous,now):
         item=fresh.get(key);old=oldmacro.get(key)
         if item and old and item['observation_date']>old['date'] and abs(item['value']-old['value'])>=(.1 if item['unit'].startswith('%') else 1):
             changes.append({'title':item['name'],'previous':old,'current':{'value':item['value'],'date':item['observation_date']},'source_url':item['source_url'],'why':'Perubahan kondisi pendanaan / ekonomi Indonesia; nilai observasi dipisahkan dari inferensi transmisi.','priority':0 if key in ('bi','inflation','gdp') else 3})
+    previous_day=previous.get('economic_regime',{}).get('evaluated_date')
     for e in risk_events:
-        if e['new'] and e['materiality']=='HIGH':changes.append({'title':e['title'],'previous':{'value':'not previously recorded','date':None},'current':{'value':e['state'],'date':e['event_date']},'source_url':e['references'][0]['url'],'why':e['mechanism'],'priority':3})
+        # First ingestion of an OLD announcement is not a development today.
+        if previous_day and e['new'] and e['event_date']>previous_day and e['materiality']=='HIGH':changes.append({'title':e['title'],'previous':{'value':'not previously recorded','date':previous_day},'current':{'value':e['state'],'date':e['event_date']},'source_url':e['references'][0]['url'],'why':e['mechanism'],'priority':3})
     changes=sorted(changes,key=lambda c:c['priority'])[:5]
-    summary=(f"Rezim ekonomi Indonesia dinilai {economy['current']}; data PDB, inflasi dan kebijakan BI dibaca bersama, sementara cakupan kredit, likuiditas dan aktivitas belum lengkap. "
+    environment='memburuk pada harga dan kurs, meskipun fase ekonomi belum terkonfirmasi' if direction=='Deteriorating' and rupiah=='Rupiah weakening bias' else 'membaik pada harga, dengan konfirmasi makro tetap diperlukan' if direction=='Improving' and rupiah!='Rupiah weakening bias' else 'campuran atau belum cukup terukur'
+    summary=(f"Rezim ekonomi Indonesia dinilai {economy['current']}; data PDB, inflasi dan kebijakan BI dibaca bersama, sementara kelengkapan kredit, likuiditas dan aktivitas tetap diperiksa. "
         f"Kondisi IHSG: {equity_regime['current']}, dengan arah harga {direction}; arah ini belum otomatis menjadi outlook yang dikonfirmasi makro. "
         f"Bias rupiah: {rupiah}. Perubahan yield AS, dolar, suku bunga domestik dan biaya energi ditelaah melalui dampaknya pada pendanaan, inflasi serta daya beli Indonesia. "
         "Berita yang belum terverifikasi tetap berupa skenario, termasuk usulan perubahan akses pasar. Manfaat bagi produsen dapat berlawanan dengan tekanan pada pengguna input dan IHSG secara keseluruhan. "
-        "Lingkungan investasi belum dapat dinyatakan membaik secara menyeluruh tanpa konfirmasi partisipasi pasar, arus dana dan indikator domestik. Prioritaskan bukti baru, tanggal observasi dan kondisi pembatal tesis; skor riset industri bukan probabilitas return.")
+        f"Lingkungan investasi {environment}; partisipasi pasar, arus dana dan indikator domestik menentukan kekuatan kesimpulan. Prioritaskan bukti baru, tanggal observasi dan kondisi pembatal tesis; skor riset industri bukan probabilitas return.")
     return {'version':VERSION,'economic_regime':economy,'equity_regime':equity_regime,'executive_summary':summary,
         'changes':changes,'change_message':None if changes else 'No Material Macro Change.',
         'ihsg':ihsg,'rupiah':fx,'events':risk_events,'industry_impacts':impacts,'missing_inputs':missing,

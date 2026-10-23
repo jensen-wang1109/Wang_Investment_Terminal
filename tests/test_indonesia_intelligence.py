@@ -48,6 +48,12 @@ class IndonesiaTests(unittest.TestCase):
         rows=[{'date':'2026-10-21','value':100},{'date':'2026-10-21','value':110},{'date':'2026-10-22','value':101},{'date':'2026-10-25','value':999}]
         r=market_features(rows,NOW);self.assertEqual(r['observations'],1);self.assertEqual(r['value'],101)
 
+    def test_old_official_announcement_is_not_a_material_change_today(self):
+        c=context();c['signals']=[{'id':'market_access','title':'Market access','macro':'conditional flows','confirm':[],
+            'fact':{'source_url':'https://www.msci.com/research','published_date':'2026-10-15','event_state':'consultation_proposal','verification_status':'primary_source_verified'},'evidence':[]}]
+        initial=build_indonesia(c,[],{},NOW)
+        self.assertEqual(initial['changes'],[]);self.assertEqual(initial['change_message'],'No Material Macro Change.')
+
     def test_changes_compare_previous_day_not_repeated_headlines(self):
         old=build_indonesia(context(),[],{},NOW)
         c=context();c['prices'][0].update(value=c['prices'][0]['value']*1.02,observation_date='2026-10-24')
