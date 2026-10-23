@@ -130,12 +130,13 @@ def macro_analytics(dataset,now):
             if not retrieved or retrieved>now or (published and published>now) or point['date']>now.date().isoformat():continue
             history.append({'date':point['date'],'value':value,'published_at':point.get('publishedAt'),
                 'collected_at':point.get('retrievedAt'),'available_at':point.get('availableAt'),'revision':point.get('revision','unknown'),
-                'checksum':point.get('rawChecksum')})
+                'checksum':point.get('rawChecksum'),'source_conflict':point.get('sourceConflict',False)})
         history=sorted({p['date']:p for p in history}.values(),key=lambda p:p['date'])
         if not history:continue
         last=history[-1];prior=history[-2] if len(history)>1 else None
         age=(now.date()-datetime.fromisoformat(last['date']).date()).days
         limit={'monthly':70,'quarterly':150,'annual':800,'policy-event':180}.get(spec['frequency'],7)
+        if spec.get('publicationCadence')=='weekly':limit=10
         steps=21 if spec['frequency'] in ('daily','business-daily','business_daily') else 3 if spec['frequency']=='monthly' else 1
         base=history[-steps-1] if len(history)>steps else None
         pct=(last['value']/base['value']-1)*100 if base and base['value'] else None
@@ -147,12 +148,12 @@ def macro_analytics(dataset,now):
             z=((last['value']/prior['value']-1)-statistics.mean(changes))/statistics.pstdev(changes)
         threshold=.1 if spec['unit'].startswith('%') else 3
         measure=absolute if spec['unit'].startswith('%') else pct
-        regime='insufficient' if measure is None else 'rising' if measure>=threshold else 'falling' if measure<=-threshold else 'stable'
+        regime='insufficient' if measure is None or last['source_conflict'] else 'rising' if measure>=threshold else 'falling' if measure<=-threshold else 'stable'
         output.append({'id':spec['id'],'name':spec['label'],'source':spec['source'],'source_url':spec['sourceUrl'],
             'credibility':'official_dataset','retrieval_status':'failed_retained' if any(f.get('seriesId')==spec['id'] or (f.get('provider')=='World Bank Pink Sheet' and spec.get('source')=='World Bank Pink Sheet') for f in dataset.get('failures',[])) else 'received',
             'value':last['value'],'unit':spec['unit'],'frequency':spec['frequency'],'observation_date':last['date'],
             'published_at':last['published_at'],'collected_at':last['collected_at'],'revision_status':last['revision'],
-            'release_time_known':bool(last['published_at']),'stale':age>limit,'age_days':age,'regime':regime,
+            'release_time_known':bool(last['published_at']),'source_conflict':last['source_conflict'],'stale':age>limit,'age_days':age,'regime':regime,
             'change_pct':pct,'change_absolute':absolute,'previous_change_pct':prev_change,
             'acceleration_pp':pct-prev_change if pct is not None and prev_change is not None else None,
             'zscore_daily_change':z,'history':history[-180:],'baseline_date':base['date'] if base else None})
