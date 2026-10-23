@@ -24,6 +24,9 @@ jobs:
       - run: python -m pip install -r services/research_api/requirements-sector.txt -r services/research_api/requirements-reporting.txt pypdf==6.21.1 openpyxl==3.1.5
       - name: Test temporal gates, state persistence, materiality and failed-write protection
         run: python -m unittest tests.test_indonesia_intelligence tests.test_macro_rates tests.test_sector_intelligence tests.test_shared_intelligence -v
+      - name: Update the actual IHSG benchmark used for relative industry returns
+        continue-on-error: true
+        run: python scripts/sync-ihsg.py
       - name: Refresh official macro releases without discarding prior sources
         continue-on-error: true
         timeout-minutes: 4
