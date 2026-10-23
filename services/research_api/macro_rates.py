@@ -224,3 +224,14 @@ def macro_dataset(cloud):
     data.update(asOf=datetime.now(timezone.utc).date().isoformat(),generatedAt=max([p.get('retrievedAt','') for p in data['observations']]+[data.get('generatedAt','')]))
     data['failures']=list({json.dumps(f,sort_keys=True):f for f in data['failures']}.values())
     return data
+
+def stored_macro_dataset(cloud):
+    """One verified publication is faster and coherent for the read-only UI.
+
+    Rebuild from individual source histories only during collector publication,
+    rather than issuing many historical queries on every page visit.
+    """
+    rows=read(cloud,'sector_macro_context?'+urlencode({'owner_id':'eq.'+cloud.owner,'payload->>kind':'is.null','select':'payload','order':'generated_at.desc','limit':1}))
+    data=rows[0]['payload'].get('intelligence_dataset') if rows else None
+    if not data:raise CloudUnavailable('Verified macro dataset not found')
+    return data

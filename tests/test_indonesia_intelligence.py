@@ -13,6 +13,15 @@ def market(symbol='^JKSE',trend=1.001):
 def context():return {'prices':[market(),market('IDR=X',.999)],'signals':[]}
 
 class IndonesiaTests(unittest.TestCase):
+    def test_current_benchmark_cli_logs_integer_counts_not_boolean(self):
+        import runpy,contextlib,io
+        rows=[]
+        class Cloud:
+            owner='fixture'
+            def request(self,path,body):rows.extend(body)
+        with patch('services.research_api.environment.load_server_environment'),patch('services.research_api.cloud.SupabaseStore',return_value=Cloud()),patch('services.research_api.ihsg_benchmark.sync_benchmark',return_value={'verified':True,'unchanged':True,'rows':1200,'last':'2026-10-22'}),contextlib.redirect_stdout(io.StringIO()):
+            runpy.run_path('scripts/sync-ihsg.py',run_name='__main__')
+        self.assertEqual(type(rows[0]['duplicate_rows']),int);self.assertEqual(rows[0]['duplicate_rows'],0)
     def test_ihsg_and_currency_present_with_missing_macro_no_fabricated_economic_cycle(self):
         result=build_indonesia(context(),[],{},NOW)
         self.assertEqual(result['economic_regime']['current'],'Uncertain / Mixed')

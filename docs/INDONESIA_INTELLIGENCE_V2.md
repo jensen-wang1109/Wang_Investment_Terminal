@@ -47,8 +47,10 @@ Fresh M2, credit, consumption / industrial releases, trade / current account, re
 
 ## Verification
 
-Actual local end-to-end run saved and read back a V2 macro report and linked sector evaluation from Supabase, with IHSG and USD/IDR observations through 22 October 2026. No new high-conviction sector thesis was forced. All 175 backend tests and 28 frontend tests passed before deployment; TypeScript check passed. PDF rendered as two pages and visually inspected. Deployment / workflow outcome must be verified separately from local success.
+Actual local end-to-end run saved and read back a V2 macro report and linked sector evaluation from Supabase, with IHSG and USD/IDR observations through 22 October 2026. No new high-conviction sector thesis was forced. All 176 backend tests and 28 frontend tests passed before deployment; TypeScript check passed. PDF rendered as two pages and visually inspected. Deployment / workflow outcome must be verified separately from local success.
 
 ## Primary publisher fallback verified after CI transport failure
 
 The first GitHub run completed but its FRED requests timed out; prior data was retained and the rate stage reported partial status. The collector now prefers the official US Treasury XML curve for current 2Y / 10Y yields and the Federal Reserve H10 table for the broad USD index. FRED remains a fallback. The H10 table publishes daily observations in a weekly release, so daily polling does not invent newer observations between releases. Fed target levels are independently checked against the official policy changes table, using the actual effective date. Provenance is recorded on each observation through a source-specific quality flag; DXY remains a separate instrument.
+
+The primary publisher path was also tested from GitHub Actions: all Treasury / broad USD / Fed policy / SBN source results passed database readback. A legacy benchmark logging error on boolean unchanged markers was corrected to integer counters and verified against the live database.
